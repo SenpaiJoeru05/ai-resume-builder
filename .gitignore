@@ -44,3 +44,5 @@ Thumbs.db
 *.docx
 models/
 cache/
+PROJECT_CONTEXT.md
+TASK.md
