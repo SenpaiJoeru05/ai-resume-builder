@@ -6,12 +6,6 @@ import { Sidebar } from './components/Sidebar'
 import { exportResumePDF } from './utils/pdfExport'
 import './App.css'
 
-// Import pdfmake and set up fonts
-import pdfMake from 'pdfmake'
-import pdfFonts from 'pdfmake/build/vfs_fonts'
-
-pdfMake.vfs = pdfFonts
-
 function App() {
   const resume = useResume()
   const [activeSection, setActiveSection] = useState('personal')
@@ -27,158 +21,35 @@ function App() {
   ]
 
   const handleDownload = async () => {
-    const getDocDefinition = () => {
-      const baseStyles = {
-        modern: {
-          header: { fontSize: 24, bold: true, color: '#1e293b', font: 'Helvetica' },
-          contact: { fontSize: 10, color: '#64748b', font: 'Helvetica' },
-          sectionHeader: { fontSize: 10, bold: true, color: '#2563eb', letterSpacing: 1.5, margin: [0, 10, 0, 5], font: 'Helvetica' },
-          jobTitle: { fontSize: 12, bold: true, color: '#1e293b', font: 'Helvetica' },
-          company: { fontSize: 10, bold: true, color: '#64748b', font: 'Helvetica' },
-          date: { fontSize: 9, color: '#64748b', font: 'Helvetica' },
-          body: { fontSize: 9, color: '#334155', lineHeight: 1.4, font: 'Helvetica' },
-          skillBadge: { fontSize: 8, color: '#1d4ed8', background: '#eff6ff', margin: [0, 2, 0, 2], font: 'Helvetica' }
+    try {
+      const response = await fetch('http://localhost:3001/api/pdf/generate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
         },
-        classic: {
-          header: { fontSize: 24, bold: true, color: '#1e293b', alignment: 'center', font: 'Times' },
-          contact: { fontSize: 10, color: '#374151', alignment: 'center', font: 'Times' },
-          sectionHeader: { fontSize: 10, bold: true, color: '#1e293b', decoration: 'underline', margin: [0, 10, 0, 5], font: 'Times' },
-          jobTitle: { fontSize: 12, bold: true, color: '#1e293b', font: 'Times' },
-          company: { fontSize: 10, italics: true, color: '#374151', font: 'Times' },
-          date: { fontSize: 9, color: '#4b5563', font: 'Times' },
-          body: { fontSize: 9, color: '#374151', lineHeight: 1.4, alignment: 'justify', font: 'Times' },
-          skillBadge: { fontSize: 9, color: '#374151', font: 'Times' }
-        },
-        minimal: {
-          header: { fontSize: 20, bold: false, color: '#1e293b', letterSpacing: 1, font: 'Helvetica' },
-          contact: { fontSize: 8, color: '#6b7280', letterSpacing: 1, textTransform: 'uppercase', font: 'Helvetica' },
-          sectionHeader: { fontSize: 9, bold: true, color: '#1e293b', margin: [0, 8, 0, 4], font: 'Helvetica' },
-          jobTitle: { fontSize: 11, bold: true, color: '#1e293b', font: 'Helvetica' },
-          company: { fontSize: 9, color: '#6b7280', font: 'Helvetica' },
-          date: { fontSize: 8, color: '#9ca3af', font: 'Helvetica' },
-          body: { fontSize: 9, color: '#374151', lineHeight: 1.4, bold: false, font: 'Helvetica' },
-          skillBadge: { fontSize: 8, color: '#6b7280', textTransform: 'uppercase', letterSpacing: 1, font: 'Helvetica' }
-        }
-      }
-
-      const styles = baseStyles[selectedTemplate] || baseStyles.modern
-
-      const content = []
-
-      // Header with blue line for modern
-      if (selectedTemplate === 'modern') {
-        content.push({ text: resume.resume.personalInfo.fullName || 'Your Name', style: 'header', margin: [0, 0, 0, 10] })
-        content.push({ canvas: [{ type: 'line', x1: 0, y1: 0, x2: 500, y2: 0, lineWidth: 2, lineColor: '#2563eb' }], margin: [0, 0, 0, 10] })
-        content.push({
-          text: [resume.resume.personalInfo.email, ' | ', resume.resume.personalInfo.phone, ' | ', resume.resume.personalInfo.address].filter(Boolean),
-          style: 'contact',
-          margin: [0, 0, 0, 20]
+        body: JSON.stringify({
+          resume: resume.resume,
+          template: selectedTemplate
         })
-      } else if (selectedTemplate === 'classic') {
-        content.push({ text: resume.resume.personalInfo.fullName || 'Your Name', style: 'header', margin: [0, 0, 0, 10] })
-        content.push({ canvas: [{ type: 'line', x1: 0, y1: 0, x2: 500, y2: 0, lineWidth: 2, lineColor: '#1e293b' }], margin: [0, 0, 0, 10] })
-        content.push({
-          text: [resume.resume.personalInfo.email, ' | ', resume.resume.personalInfo.phone, ' | ', resume.resume.personalInfo.address].filter(Boolean),
-          style: 'contact',
-          margin: [0, 0, 0, 20]
-        })
-      } else {
-        content.push({ text: resume.resume.personalInfo.fullName || 'Your Name', style: 'header', margin: [0, 0, 0, 8] })
-        content.push({
-          text: [resume.resume.personalInfo.email, ' • ', resume.resume.personalInfo.phone, ' • ', resume.resume.personalInfo.address].filter(Boolean),
-          style: 'contact',
-          margin: [0, 0, 0, 16]
-        })
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to generate PDF');
       }
-
-      // Summary
-      if (resume.resume.summary) {
-        if (selectedTemplate !== 'minimal') {
-          content.push({ text: 'PROFESSIONAL SUMMARY', style: 'sectionHeader' })
-        }
-        content.push({ text: resume.resume.summary, style: 'body', margin: [0, 0, 0, 10] })
-      }
-
-      // Experience
-      if (resume.resume.experience.length > 0) {
-        if (selectedTemplate !== 'minimal') {
-          content.push({ text: 'EXPERIENCE', style: 'sectionHeader' })
-        }
-        resume.resume.experience.forEach(exp => {
-          content.push({
-            stack: [
-              {
-                columns: [
-                  { text: exp.title, style: 'jobTitle', width: '70%' },
-                  { text: `${exp.startDate} - ${exp.endDate}`, style: 'date', width: '30%', alignment: 'right' }
-                ]
-              },
-              { text: exp.company, style: 'company', margin: [0, 2, 0, 0] },
-              exp.description && { text: exp.description, style: 'body', margin: [0, 4, 0, 0] }
-            ],
-            margin: [0, 0, 0, 12]
-          })
-        })
-      }
-
-      // Education
-      if (resume.resume.education.length > 0) {
-        if (selectedTemplate !== 'minimal') {
-          content.push({ text: 'EDUCATION', style: 'sectionHeader' })
-        }
-        resume.resume.education.forEach(edu => {
-          content.push({
-            stack: [
-              {
-                columns: [
-                  { text: edu.degree, style: 'jobTitle', width: '70%' },
-                  edu.graduationDate && { text: edu.graduationDate, style: 'date', width: '30%', alignment: 'right' }
-                ].filter(Boolean)
-              },
-              { text: edu.school, style: 'company', margin: [0, 2, 0, 0] },
-              edu.field && { text: `Field of Study: ${edu.field}`, style: 'body', margin: [0, 2, 0, 0] }
-            ],
-            margin: [0, 0, 0, 12]
-          })
-        })
-      }
-
-      // Skills with boxes for modern
-      if (resume.resume.skills.length > 0) {
-        if (selectedTemplate !== 'minimal') {
-          content.push({ text: 'SKILLS', style: 'sectionHeader' })
-        }
-        if (selectedTemplate === 'modern') {
-          content.push({
-            text: resume.resume.skills.map(skill => ({
-              text: skill.name,
-              style: 'skillBadge',
-              background: '#eff6ff',
-              color: '#1d4ed8',
-              margin: [0, 2, 0, 2],
-              decoration: 'none'
-            })),
-            margin: [0, 0, 0, 8]
-          })
-        } else if (selectedTemplate === 'classic') {
-          content.push({ text: resume.resume.skills.map(skill => skill.name).join(' • '), style: 'body' })
-        } else {
-          content.push({ text: resume.resume.skills.map(skill => skill.name).join(' / '), style: 'skillBadge' })
-        }
-      }
-
-      return {
-        content,
-        styles,
-        pageMargins: [72, 36, 72, 72],
-        pageSize: 'LETTER',
-        defaultStyle: {
-          font: selectedTemplate === 'classic' ? 'Times' : 'Helvetica'
-        }
-      }
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'resume.pdf';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Download error:', error);
+      alert('Failed to download PDF. Please make sure the server is running on port 3001.');
     }
-
-    pdfMake.createPdf(getDocDefinition()).download('resume.pdf')
   }
 
   const handleAutoFill = () => {
@@ -335,7 +206,7 @@ function App() {
             <h2 className="text-lg font-semibold text-slate-900">Live Preview</h2>
           </div>
           <div className="flex-1 overflow-auto flex justify-center items-start py-6">
-            <div id="resume-preview" className="bg-white shadow-2xl print:shadow-none print:rounded-none print:p-0 flex-shrink-0 print:w-full relative" style={{ width: '794px', minHeight: '1123px' }}>
+            <div id="resume-preview" className="bg-white shadow-2xl print:shadow-none print:rounded-none print:p-0 flex-shrink-0 print:w-full relative" style={{ width: '794px', minHeight: '1123px', transform: 'scale(0.9)', transformOrigin: 'top center' }}>
               <ResumePreview resume={resume.resume} template={selectedTemplate} />
               {/* Live Preview Page Number */}
               <div className="absolute bottom-4 right-6 text-sm text-gray-500 print:hidden">
