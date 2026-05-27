@@ -39,7 +39,7 @@ export function ResumePreview({ resume, template = 'modern' }) {
         {/* Professional Summary */}
         {resume.summary && (
           <div className="mb-4">
-            <h2 className="text-sm font-bold text-slate-900 mb-2 uppercase tracking-widest text-blue-600">Professional Summary</h2>
+            <h2 className="text-sm font-bold mb-2 uppercase tracking-widest text-blue-600">Professional Summary</h2>
             <p className="text-slate-700 leading-relaxed text-justify text-xs">{resume.summary}</p>
           </div>
         )}
@@ -47,13 +47,13 @@ export function ResumePreview({ resume, template = 'modern' }) {
         {/* Experience */}
         {resume.experience.length > 0 && (
           <div className="mb-4">
-            <h2 className="text-sm font-bold text-slate-900 mb-2 uppercase tracking-widest text-blue-600">Experience</h2>
+            <h2 className="text-sm font-bold mb-2 uppercase tracking-widest text-blue-600">Experience</h2>
             <div className="space-y-3">
               {resume.experience.map((exp) => (
                 <div key={exp.id}>
                   <div className="flex justify-between items-start">
                     <div className="flex-1">
-                      <h3 className="font-bold text-slate-900 text-sm">{exp.jobTitle}</h3>
+                      <h3 className="font-bold text-slate-900 text-sm">{exp.title || exp.jobTitle}</h3>
                       <p className="text-slate-600 font-semibold text-xs">{exp.company}</p>
                     </div>
                     <span className="text-slate-500 text-xs whitespace-nowrap ml-2">
@@ -74,7 +74,7 @@ export function ResumePreview({ resume, template = 'modern' }) {
         {/* Education */}
         {resume.education.length > 0 && (
           <div className="mb-4">
-            <h2 className="text-sm font-bold text-slate-900 mb-2 uppercase tracking-widest text-blue-600">Education</h2>
+            <h2 className="text-sm font-bold mb-2 uppercase tracking-widest text-blue-600">Education</h2>
             <div className="space-y-2">
               {resume.education.map((edu) => (
                 <div key={edu.id}>
@@ -99,7 +99,7 @@ export function ResumePreview({ resume, template = 'modern' }) {
         {/* Skills */}
         {resume.skills.length > 0 && (
           <div>
-            <h2 className="text-sm font-bold text-slate-900 mb-2 uppercase tracking-widest text-blue-600">Skills</h2>
+            <h2 className="text-sm font-bold mb-2 uppercase tracking-widest text-blue-600">Skills</h2>
             <div className="flex flex-wrap gap-2">
               {resume.skills.map((skill) => (
                 <span
@@ -134,7 +134,7 @@ export function ResumePreview({ resume, template = 'modern' }) {
         {/* Professional Summary */}
         {resume.summary && (
           <div className="mb-4">
-            <h2 className="text-sm font-bold text-slate-900 mb-2 uppercase tracking-widest border-b border-slate-300 pb-2">Professional Summary</h2>
+            <h2 className="text-sm font-bold mb-2 uppercase tracking-widest border-b border-slate-300 pb-2">Professional Summary</h2>
             <p className="text-slate-700 leading-relaxed text-justify text-xs">{resume.summary}</p>
           </div>
         )}
@@ -142,13 +142,13 @@ export function ResumePreview({ resume, template = 'modern' }) {
         {/* Experience */}
         {resume.experience.length > 0 && (
           <div className="mb-4">
-            <h2 className="text-sm font-bold text-slate-900 mb-2 uppercase tracking-widest border-b border-slate-300 pb-2">Experience</h2>
+            <h2 className="text-sm font-bold mb-2 uppercase tracking-widest border-b border-slate-300 pb-2">Experience</h2>
             <div className="space-y-3">
               {resume.experience.map((exp) => (
                 <div key={exp.id}>
                   <div className="flex justify-between items-start">
                     <div className="flex-1">
-                      <h3 className="font-bold text-slate-900 text-sm">{exp.jobTitle}</h3>
+                      <h3 className="font-bold text-slate-900 text-sm">{exp.title || exp.jobTitle}</h3>
                       <p className="text-slate-700 italic text-xs">{exp.company}</p>
                     </div>
                     <span className="text-slate-600 text-xs whitespace-nowrap ml-2">
@@ -169,7 +169,7 @@ export function ResumePreview({ resume, template = 'modern' }) {
         {/* Education */}
         {resume.education.length > 0 && (
           <div className="mb-4">
-            <h2 className="text-sm font-bold text-slate-900 mb-2 uppercase tracking-widest border-b border-slate-300 pb-2">Education</h2>
+            <h2 className="text-sm font-bold mb-2 uppercase tracking-widest border-b border-slate-300 pb-2">Education</h2>
             <div className="space-y-2">
               {resume.education.map((edu) => (
                 <div key={edu.id}>
@@ -194,7 +194,7 @@ export function ResumePreview({ resume, template = 'modern' }) {
         {/* Skills */}
         {resume.skills.length > 0 && (
           <div>
-            <h2 className="text-sm font-bold text-slate-900 mb-2 uppercase tracking-widest border-b border-slate-300 pb-2">Skills</h2>
+            <h2 className="text-sm font-bold mb-2 uppercase tracking-widest border-b border-slate-300 pb-2">Skills</h2>
             <p className="text-slate-700 text-xs leading-relaxed">
               {resume.skills.map((skill) => skill.name).join(' • ')}
             </p>
@@ -233,7 +233,7 @@ export function ResumePreview({ resume, template = 'modern' }) {
               {resume.experience.map((exp) => (
                 <div key={exp.id}>
                   <div className="flex justify-between items-baseline">
-                    <h3 className="font-medium text-slate-900 text-sm">{exp.jobTitle}</h3>
+                    <h3 className="font-medium text-slate-900 text-sm">{exp.title || exp.jobTitle}</h3>
                     <span className="text-xs text-slate-400">
                       {exp.startDate} – {exp.endDate}
                     </span>
