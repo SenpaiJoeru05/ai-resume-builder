@@ -1,6 +1,6 @@
-import { CompletenessMeter } from './CompletenessMeter';
+import { CompletenessMeter } from '../CompletenessMeter'
 
-export function Sidebar({ sections, activeSection, setActiveSection, isOpen, setIsOpen, resume }) {
+export function EditorSidebar({ sections, activeSection, setActiveSection, isOpen, setIsOpen, resume }) {
   return (
     <>
       {/* Mobile Overlay */}

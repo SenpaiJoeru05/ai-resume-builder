@@ -21,32 +21,51 @@ CRITICAL GUIDELINES:
 7. Never include phrases like "Given the lack of..." or "Since you haven't provided..."
 8. Output should be ready to copy-paste directly into a resume
 9. Keep summaries to 2-3 sentences maximum
-10. Use professional, modern language that appeals to hiring managers`;
+10. Use professional, modern language that appeals to hiring managers
+11. Tailor content to the candidate's TARGET ROLE and industry when provided`;
 
-export async function generateSummary(personalInfo, skills, experience) {
+// Builds a reusable block describing the role the resume is being tailored to.
+function buildTargetContext(professionalInfo = {}) {
+  const { jobTitle, industry, seniority, yearsExperience, tone, jobDescription } = professionalInfo;
+  const lines = [];
+  if (jobTitle) lines.push(`- Target Role: ${jobTitle}`);
+  if (seniority) lines.push(`- Seniority Level: ${seniority}`);
+  if (industry) lines.push(`- Industry: ${industry}`);
+  if (yearsExperience) lines.push(`- Years of Experience: ${yearsExperience}`);
+  if (jobDescription) lines.push(`- Target Job Description (tailor toward this): ${jobDescription}`);
+  return { context: lines.join('\n'), tone: tone || 'professional' };
+}
+
+export async function generateSummary(personalInfo, skills, experience, professionalInfo = {}) {
   try {
     if (!apiKey) {
       throw new Error('Gemini API key is not configured. Please set VITE_GEMINI_API_KEY in your .env file.');
     }
 
-    const model = genAI.getGenerativeModel({ 
+    const model = genAI.getGenerativeModel({
       model: 'gemini-2.5-flash',
       systemInstruction: SYSTEM_PROMPT
     });
 
     const skillsList = skills.length > 0 ? skills.map((s) => s.name).join(', ') : 'various professional skills';
-    const experienceList = experience.length > 0 
+    const experienceList = experience.length > 0
       ? experience.map((e) => `${e.jobTitle} at ${e.company}`).join('; ')
       : 'professional experience across various roles';
 
-    const prompt = `Write a professional resume summary for ${personalInfo.fullName || 'a professional'}.
+    const { context, tone } = buildTargetContext(professionalInfo);
+    const targetTitle = professionalInfo.jobTitle ? ` targeting a ${professionalInfo.jobTitle} role` : '';
 
+    const prompt = `Write a professional resume summary for ${personalInfo.fullName || 'a professional'}${targetTitle}.
+
+${context ? `Target Role Context:\n${context}\n` : ''}
 Available Information:
 - Skills: ${skillsList}
 - Experience: ${experienceList}
 
 Requirements:
 - Write 2-3 sentences maximum
+- Tailor the summary to the target role and industry above
+- Write in a ${tone} tone
 - Focus on professional strengths, expertise, and value proposition
 - Use strong action verbs and professional language
 - Make it impactful and memorable
@@ -110,6 +129,47 @@ Improve the description now:`;
   } catch (error) {
     console.error('Error improving experience:', error);
     throw error;
+  }
+}
+
+export async function improveBullet(bulletText, jobTitle, professionalInfo = {}) {
+  try {
+    if (!apiKey) {
+      throw new Error('Gemini API key is not configured. Please set VITE_GEMINI_API_KEY in your .env file.');
+    }
+
+    const model = genAI.getGenerativeModel({
+      model: 'gemini-2.5-flash',
+      systemInstruction: SYSTEM_PROMPT
+    });
+
+    const { context } = buildTargetContext(professionalInfo);
+
+    const prompt = `Rewrite this single resume bullet point to be more impactful.
+
+${context ? `Target Role Context:\n${context}\n` : ''}
+Role: ${jobTitle || 'professional'}
+Current bullet: ${bulletText}
+
+Requirements:
+- Start with a strong action verb
+- Show measurable impact; if no metric is given, insert a realistic placeholder like [X%] or [Y number]
+- One concise sentence, no leading dash or bullet character
+- Output ONLY the rewritten bullet text, nothing else
+
+Rewrite the bullet now:`;
+
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    let improved = response.text().trim();
+    improved = improved.replace(/^[-•*]\s*/, '');
+    improved = improved.replace(/^(Here is|Here's|Rewritten:|Improved:)\s*/i, '');
+    improved = improved.replace(/\n+/g, ' ').trim();
+    return improved;
+  } catch (error) {
+    console.error('Error improving bullet:', error);
+    const message = error?.message || 'Unknown error occurred';
+    throw new Error(`Failed to improve bullet: ${message}`);
   }
 }
 
