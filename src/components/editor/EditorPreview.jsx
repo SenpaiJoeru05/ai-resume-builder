@@ -120,12 +120,16 @@ export function EditorPreview({
           }}
         >
           {/* flow wrapper — sized to scaled paper height */}
-          <div style={{ position: 'relative', width: A4_WIDTH * scale }}>
+          <div style={{ position: 'relative', width: A4_WIDTH * scale, minHeight: A4_HEIGHT * scale }}>
 
             {/* THE PAPER */}
             <div
               className="cv-paper"
-              style={{ width: A4_WIDTH, transform: `scale(${scale})` }}
+              style={{ 
+                width: A4_WIDTH, 
+                height: A4_HEIGHT, 
+                transform: `scale(${scale})` 
+              }}
             >
               <ResumePreview resume={resume} template={selectedTemplate} />
             </div>

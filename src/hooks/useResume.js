@@ -160,6 +160,30 @@ export function useResume() {
     return newResume;
   };
 
+  const createResumeWithData = (title = 'New Resume', data = {}) => {
+    const newResume = {
+      ...initialResume,
+      personalInfo: {
+        ...initialResume.personalInfo,
+        ...(data.personalInfo || {}),
+      },
+      professionalInfo: {
+        ...initialResume.professionalInfo,
+        ...(data.professionalInfo || {}),
+      },
+      meta: {
+        ...initialResume.meta,
+        id: generateId(),
+        title,
+        template: data.template || 'modern',
+        updatedAt: new Date().toISOString(),
+      },
+    };
+    setResumes((prev) => [...prev, newResume]);
+    setActiveResumeId(newResume.meta.id);
+    return newResume;
+  };
+
   const deleteResume = (id) => {
     setResumes((prev) => {
       const filtered = prev.filter((r) => r.meta.id !== id);
@@ -390,6 +414,18 @@ export function useResume() {
     }));
   };
 
+  // Flush storage immediately (bypass debounce)
+  const flushStorage = () => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(resumes));
+      localStorage.setItem(ACTIVE_RESUME_KEY, activeResumeId || resume.meta.id);
+      setSaveStatus('saved');
+    } catch (error) {
+      console.error('Could not flush storage:', error);
+      setSaveStatus('error');
+    }
+  };
+
   return {
     resume,
     resumes,
@@ -397,6 +433,7 @@ export function useResume() {
     saveStatus,
     setActiveResumeId,
     createResume,
+    createResumeWithData,
     deleteResume,
     duplicateResume,
     updatePersonalInfo,
@@ -424,5 +461,6 @@ export function useResume() {
     toggleSectionVisibility,
     renameSection,
     reorderSections,
+    flushStorage,
   };
 }
