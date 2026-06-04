@@ -93,7 +93,7 @@ export function EditorPage() {
     saveStatus
   } = useResume()
 
-  const [activeSection, setActiveSection] = useState('target')
+  const [activeSection, setActiveSection] = useState('summary')
   const [showPreviewModal, setShowPreviewModal] = useState(false)
   const [showTemplateGallery, setShowTemplateGallery] = useState(false)
   const [mobileView, setMobileView] = useState('edit')
@@ -155,7 +155,6 @@ export function EditorPage() {
   ]
 
   const allSections = sectionGroups.flatMap(g => g.sections)
-
   const selectedTemplate = resume?.meta?.template || 'modern'
 
   const handleDownload = () => setShowPreviewModal(true)
@@ -221,13 +220,12 @@ export function EditorPage() {
 
   return (
     <div
-      className="h-screen flex flex-col bg-slate-50 overflow-hidden font-sans"
-      style={{ fontFamily: "'DM Sans', system-ui, sans-serif" }}
+      className="h-screen flex flex-col overflow-hidden font-sans"
+      style={{ fontFamily: "'DM Sans', system-ui, sans-serif", }}
     >
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Sora:wght@700;800&display=swap');
         * { box-sizing: border-box; }
-        .gradient-text { background: linear-gradient(135deg, #4f46e5 0%, #818cf8 50%, #a78bfa 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
         .editor-sidebar { scrollbar-width: thin; scrollbar-color: #e2e8f0 transparent; }
         .editor-sidebar::-webkit-scrollbar { width: 3px; }
         .editor-sidebar::-webkit-scrollbar-track { background: transparent; }
@@ -244,17 +242,18 @@ export function EditorPage() {
         .btn-ghost:hover { background: rgba(0,0,0,0.05); }
         .template-chip { transition: all 0.15s; }
         .template-chip:hover { background: #f1f5f9; }
-        .preview-panel { background: #f1f5f9; }
-        @media (max-width: 1023px) { .preview-panel { display: none; } }
-        @media (max-width: 1023px) { .mobile-only { display: flex !important; } }
-        .mobile-only { display: none; }
+        /* hide preview col on small screens */
+        .preview-col { display: flex; }
+        @media (max-width: 1023px) { .preview-col { display: none; } }
+        @media (max-width: 1023px) { .mobile-tabbar { display: flex !important; } }
+        .mobile-tabbar { display: none; }
       `}</style>
 
-      {/* ══════════════ TOP HEADER BAR ══════════════ */}
+      {/* ══ HEADER ══ */}
       <header className="flex-shrink-0 bg-white border-b border-slate-100 z-40">
         <div className="flex items-center h-14 px-3 gap-2">
 
-          {/* Back button + Logo */}
+          {/* Back + Logo */}
           <button
             onClick={goToDashboard}
             className="btn-ghost flex items-center gap-2 pl-2 pr-3 py-2 rounded-xl text-slate-600 hover:text-slate-900"
@@ -297,7 +296,7 @@ export function EditorPage() {
             )}
           </div>
 
-          {/* Center: template chip */}
+          {/* Template chip */}
           <button
             onClick={() => setShowTemplateGallery(true)}
             className="template-chip hidden md:flex items-center gap-2 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-600"
@@ -313,11 +312,9 @@ export function EditorPage() {
           <div className="flex items-center gap-2 ml-auto">
             <SaveBadge status={saveStatus} />
 
-            {/* Auto-fill (dev helper) */}
             <button
               onClick={handleAutoFill}
               className="btn-ghost hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium text-slate-500 border border-slate-200"
-              title="Auto-fill with sample data"
             >
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
@@ -325,18 +322,15 @@ export function EditorPage() {
               Demo data
             </button>
 
-            {/* Template (mobile) */}
             <button
               onClick={() => setShowTemplateGallery(true)}
               className="btn-ghost md:hidden flex items-center justify-center w-9 h-9 rounded-xl text-slate-500 border border-slate-200"
-              title="Change template"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1V5zm10 0a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zm10 0a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
               </svg>
             </button>
 
-            {/* Download */}
             <button
               onClick={handleDownload}
               className="btn-primary flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold shadow-sm"
@@ -349,32 +343,26 @@ export function EditorPage() {
           </div>
         </div>
 
-        {/* Progress bar strip */}
+        {/* Save progress strip */}
         <div className="h-0.5 bg-slate-100">
-          {saveStatus === 'saving' && (
-            <div className="h-full bg-gradient-to-r from-indigo-400 to-violet-400 animate-pulse w-full"></div>
-          )}
-          {saveStatus === 'saved' && (
-            <div className="h-full bg-emerald-400 transition-all duration-500" style={{ width: '100%' }}></div>
-          )}
+          {saveStatus === 'saving' && <div className="h-full bg-gradient-to-r from-indigo-400 to-violet-400 animate-pulse w-full" />}
+          {saveStatus === 'saved'  && <div className="h-full bg-emerald-400 w-full transition-all duration-500" />}
         </div>
       </header>
 
-      {/* ══════════════ MAIN 3-COLUMN LAYOUT ══════════════ */}
+      {/* ══ 3-COLUMN BODY ══ */}
       <div className="flex-1 flex overflow-hidden">
 
-        {/* ── COL 1: SECTION NAVIGATION SIDEBAR ── */}
+        {/* ── COL 1: SECTIONS SIDEBAR ── */}
         <aside
           className={`flex-shrink-0 bg-white border-r border-slate-100 flex flex-col transition-all duration-300 overflow-hidden ${
             sidebarCollapsed ? 'w-0 opacity-0 pointer-events-none' : 'w-52'
           }`}
         >
-          {/* Sidebar header */}
-          <div className="flex items-center justify-between px-3 pt-4 pb-2">
+          <div className="flex items-center px-3 pt-4 pb-2">
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Sections</span>
           </div>
 
-          {/* Section nav */}
           <nav className="editor-sidebar flex-1 overflow-y-auto px-2 pb-4 space-y-4">
             {sectionGroups.map(group => (
               <SectionGroup key={group.label} label={group.label}>
@@ -391,10 +379,9 @@ export function EditorPage() {
             ))}
           </nav>
 
-          {/* Sidebar footer: completion hint */}
           <div className="px-3 py-4 border-t border-slate-100">
             <div className="bg-indigo-50 rounded-xl p-3">
-              <div className="flex items-center gap-2 mb-2">
+              <div className="flex items-center gap-2 mb-1.5">
                 <span className="text-sm">✦</span>
                 <span className="text-xs font-bold text-indigo-700">AI Tips</span>
               </div>
@@ -408,20 +395,17 @@ export function EditorPage() {
         {/* ── COL 2: FORM PANEL ── */}
         <div className="flex flex-col flex-1 min-w-0 lg:max-w-[480px] xl:max-w-[520px] bg-white border-r border-slate-100">
 
-          {/* Form panel topbar */}
+          {/* Form topbar */}
           <div className="flex-shrink-0 flex items-center gap-2 px-4 py-3 border-b border-slate-100 bg-white">
-            {/* Collapse sidebar toggle */}
             <button
               onClick={() => setSidebarCollapsed(p => !p)}
               className="btn-ghost flex items-center justify-center w-8 h-8 rounded-lg text-slate-400 hover:text-slate-700"
-              title={sidebarCollapsed ? 'Show sections' : 'Hide sections'}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={sidebarCollapsed ? 'M4 6h16M4 12h16M4 18h16' : 'M11 19l-7-7 7-7m8 14l-7-7 7-7'} />
               </svg>
             </button>
 
-            {/* Active section breadcrumb */}
             <div className="flex items-center gap-1.5 flex-1 min-w-0">
               <span className="text-base">{allSections.find(s => s.id === activeSection)?.icon}</span>
               <span className="text-sm font-bold text-slate-800 truncate">
@@ -429,7 +413,6 @@ export function EditorPage() {
               </span>
             </div>
 
-            {/* Section prev/next arrows */}
             <div className="flex items-center gap-1">
               {(() => {
                 const idx = allSections.findIndex(s => s.id === activeSection)
@@ -500,7 +483,7 @@ export function EditorPage() {
             </div>
           </div>
 
-          {/* Form footer: next section CTA */}
+          {/* Form footer */}
           <div className="flex-shrink-0 px-5 py-3 border-t border-slate-100 bg-white">
             {(() => {
               const idx = allSections.findIndex(s => s.id === activeSection)
@@ -534,7 +517,13 @@ export function EditorPage() {
         </div>
 
         {/* ── COL 3: LIVE PREVIEW PANEL ── */}
-        <div className="preview-panel flex-1 flex flex-col overflow-hidden">
+        <div
+          className="preview-panel flex-1 flex flex-col overflow-hidden bg-white"
+          style={{
+            backgroundImage: 'radial-gradient(#E2E8F0 1px, transparent 0)',
+            backgroundSize: '20px 20px',
+          }}
+        >
           {/* Preview topbar */}
           <div className="flex-shrink-0 flex items-center justify-between px-4 py-3 bg-slate-100 border-b border-slate-200">
             <div className="flex items-center gap-2">
@@ -562,34 +551,32 @@ export function EditorPage() {
             </div>
           </div>
 
-          {/* Preview content */}
-          <div className="flex-1 overflow-auto p-6 flex justify-center">
-            <div className="w-full max-w-[680px]">
-              <EditorPreview
-                resume={resume}
-                template={selectedTemplate}
-                onTemplateChange={updateTemplate}
-                showTemplateGallery={showTemplateGallery}
-                setShowTemplateGallery={setShowTemplateGallery}
-                TemplateGallery={TemplateGallery}
-              />
-            </div>
+          {/* EditorPreview — takes ALL remaining height, no padding, no wrapper */}
+          <div className="flex-1 min-h-0">
+            <EditorPreview
+              resume={resume}
+              template={selectedTemplate}
+              onTemplateChange={updateTemplate}
+              showTemplateGallery={showTemplateGallery}
+              setShowTemplateGallery={setShowTemplateGallery}
+              TemplateGallery={TemplateGallery}
+            />
           </div>
         </div>
       </div>
 
-      {/* ══════════════ MOBILE BOTTOM TAB BAR ══════════════ */}
-      <div className="mobile-only lg:hidden fixed bottom-0 inset-x-0 bg-white border-t border-slate-200 z-50 items-stretch">
+      {/* ══ MOBILE TAB BAR ══ */}
+      <div className="mobile-tabbar lg:hidden fixed bottom-0 inset-x-0 bg-white border-t border-slate-200 z-50 items-stretch">
         {[
-          { id: 'edit', label: 'Edit', icon: (active) => (
+          { id: 'edit', label: 'Edit', icon: (a) => (
             <svg className="w-5 h-5 mx-auto mb-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={active ? 2.5 : 2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={a ? 2.5 : 2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
             </svg>
           )},
-          { id: 'preview', label: 'Preview', icon: (active) => (
+          { id: 'preview', label: 'Preview', icon: (a) => (
             <svg className="w-5 h-5 mx-auto mb-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={active ? 2.5 : 2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={active ? 2.5 : 2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={a ? 2.5 : 2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={a ? 2.5 : 2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
             </svg>
           )},
         ].map(tab => {
@@ -609,7 +596,7 @@ export function EditorPage() {
         })}
       </div>
 
-      {/* ══════════════ PDF PREVIEW MODAL ══════════════ */}
+      {/* ══ PDF MODAL ══ */}
       <PDFPreviewModal
         isOpen={showPreviewModal}
         resume={resume}
