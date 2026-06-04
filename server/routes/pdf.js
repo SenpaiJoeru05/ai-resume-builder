@@ -22,8 +22,8 @@ function getTemplateCSS(template) {
     
     .container {
       padding: 0.5in 1in 1in 1in;
-      width: 794px;
-      max-width: 794px;
+      width: 816px;
+      max-width: 816px;
       position: relative;
     }
     

@@ -1,3 +1,5 @@
+// ResumePreview.jsx
+
 const SKILL_ORDER = ['Technical', 'Tools', 'Soft Skills', 'Languages', 'Other'];
 
 const FONT_FAMILIES = {
@@ -231,7 +233,7 @@ export function ResumePreview({ resume, template = 'modern' }) {
   const renderModernTemplate = () => {
     const heading = `text-sm font-bold mb-2 uppercase tracking-widest`;
     return (
-      <div className="bg-white h-full flex flex-col" style={{ fontFamily, fontSize: '12px', padding: spacing.padding }}>
+      <div className="bg-white" style={{ fontFamily, fontSize: '12px', padding: spacing.padding, width: '100%', boxSizing: 'border-box' }}>
         <div className="border-b-2 pb-4 mb-4" style={{ borderColor: theme.accentColor }}>
           <h1 className="text-3xl font-bold text-slate-900 mb-2">{personalInfo.fullName || 'Your Name'}</h1>
           <div className="flex flex-wrap gap-3 text-sm text-slate-600">
@@ -271,7 +273,7 @@ export function ResumePreview({ resume, template = 'modern' }) {
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto pr-2">
+        <div>
           {visibleSections.map(sectionKey => renderSection(sectionKey, heading))}
         </div>
       </div>
@@ -282,7 +284,7 @@ export function ResumePreview({ resume, template = 'modern' }) {
   const renderClassicTemplate = () => {
     const heading = 'text-sm font-bold mb-2 uppercase tracking-widest border-b pb-2';
     return (
-      <div className="bg-white h-full flex flex-col" style={{ fontFamily, fontSize: '12px', padding: spacing.padding }}>
+      <div className="bg-white" style={{ fontFamily, fontSize: '12px', padding: spacing.padding, width: '100%', boxSizing: 'border-box' }}>
         <div className="text-center border-b-2 pb-4 mb-4" style={{ borderColor: theme.accentColor }}>
           <h1 className="text-3xl font-bold text-slate-900 mb-2 uppercase tracking-wide">{personalInfo.fullName || 'Your Name'}</h1>
           <div className="flex flex-wrap justify-center gap-x-2 gap-y-1 text-sm text-slate-700">
@@ -295,7 +297,7 @@ export function ResumePreview({ resume, template = 'modern' }) {
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto pr-2">
+        <div>
           {visibleSections.map(sectionKey => renderSection(sectionKey, heading))}
         </div>
       </div>
@@ -306,7 +308,7 @@ export function ResumePreview({ resume, template = 'modern' }) {
   const renderMinimalTemplate = () => {
     const heading = 'text-xs font-semibold uppercase tracking-widest mb-1';
     return (
-      <div className="bg-white h-full flex flex-col" style={{ fontFamily, fontSize: '12px', padding: spacing.padding }}>
+      <div className="bg-white" style={{ fontFamily, fontSize: '12px', padding: spacing.padding, width: '100%', boxSizing: 'border-box' }}>
         <div className="mb-4">
           <h1 className="text-2xl font-light text-slate-900 mb-2 tracking-wide">{personalInfo.fullName || 'Your Name'}</h1>
           <div className="flex flex-wrap gap-2 text-xs uppercase tracking-widest" style={{ color: theme.accentColor }}>
@@ -319,7 +321,7 @@ export function ResumePreview({ resume, template = 'modern' }) {
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto pr-2">
+        <div>
           {visibleSections.map(sectionKey => renderSection(sectionKey, heading))}
         </div>
       </div>
@@ -331,7 +333,7 @@ export function ResumePreview({ resume, template = 'modern' }) {
     const heading = `text-xs font-bold mb-2 uppercase tracking-widest`;
     const groups = skillGroups();
     return (
-      <div className="bg-white h-full flex flex-col" style={{ fontFamily, fontSize: '11px', padding: spacing.padding }}>
+      <div className="bg-white" style={{ fontFamily, fontSize: '11px', padding: spacing.padding, width: '100%', boxSizing: 'border-box' }}>
         <div className="flex gap-4 mb-4" style={{ borderBottom: `2px solid ${theme.accentColor}`, paddingBottom: '1rem' }}>
           <div className="w-2/3">
             <h1 className="text-2xl font-bold text-slate-900 mb-2">{personalInfo.fullName || 'Your Name'}</h1>
@@ -350,14 +352,14 @@ export function ResumePreview({ resume, template = 'modern' }) {
           </div>
         </div>
 
-        <div className="flex gap-4 flex-1 overflow-y-auto pr-2">
+        <div className="flex gap-4">
           {/* Left Column - Main Content */}
-          <div className="w-2/3 space-y-4">
+          <div className="w-2/3">
             {visibleSections.filter(s => ['summary', 'experience', 'education'].includes(s)).map(sectionKey => renderSection(sectionKey, heading))}
           </div>
 
           {/* Right Column - Skills & Extras */}
-          <div className="w-1/3 space-y-4">
+          <div className="w-1/3">
             {skills.length > 0 && (
               <div className="mb-4">
                 <h2 className={heading} style={{ color: theme.accentColor }}>Skills</h2>
@@ -388,7 +390,7 @@ export function ResumePreview({ resume, template = 'modern' }) {
   const renderATSSafeTemplate = () => {
     const heading = `text-sm font-bold mb-2 uppercase tracking-widest`;
     return (
-      <div className="bg-white h-full flex flex-col" style={{ fontFamily: 'Arial, sans-serif', fontSize: '12px', padding: spacing.padding }}>
+      <div className="bg-white" style={{ fontFamily: 'Arial, sans-serif', fontSize: '12px', padding: spacing.padding, width: '100%', boxSizing: 'border-box' }}>
         <div className="mb-4" style={{ borderBottom: `2px solid ${theme.accentColor}`, paddingBottom: '1rem' }}>
           <h1 className="text-2xl font-bold text-slate-900 mb-2">{personalInfo.fullName || 'Your Name'}</h1>
           <div className="flex flex-wrap gap-3 text-sm text-slate-600">
@@ -401,7 +403,7 @@ export function ResumePreview({ resume, template = 'modern' }) {
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto pr-2">
+        <div>
           {visibleSections.map(sectionKey => renderSection(sectionKey, heading))}
         </div>
       </div>
@@ -413,7 +415,7 @@ export function ResumePreview({ resume, template = 'modern' }) {
     const heading = `text-sm font-bold mb-2 uppercase tracking-widest`;
     const groups = skillGroups();
     return (
-      <div className="h-full flex flex-col" style={{ fontFamily, fontSize: '12px', padding: spacing.padding, backgroundColor: theme.accentColor }}>
+      <div className="flex flex-col" style={{ fontFamily, fontSize: '12px', padding: spacing.padding, backgroundColor: theme.accentColor, width: '100%', boxSizing: 'border-box', minHeight: '100%' }}>
         <div className="bg-white rounded-lg p-6 mb-4 shadow-lg">
           <h1 className="text-3xl font-bold text-slate-900 mb-2">{personalInfo.fullName || 'Your Name'}</h1>
           <div className="flex flex-wrap gap-3 text-sm text-slate-600">
@@ -426,7 +428,7 @@ export function ResumePreview({ resume, template = 'modern' }) {
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto pr-2 bg-white rounded-lg p-6 shadow-lg">
+        <div className="bg-white rounded-lg shadow-lg p-6">
           {visibleSections.map(sectionKey => renderSection(sectionKey, heading))}
         </div>
       </div>
@@ -450,9 +452,5 @@ export function ResumePreview({ resume, template = 'modern' }) {
     }
   };
 
-  return (
-    <div id="resume-preview" className="h-full w-full overflow-y-auto flex flex-col">
-      {renderTemplate()}
-    </div>
-  );
+  return renderTemplate();
 }
