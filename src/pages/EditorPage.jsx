@@ -101,6 +101,8 @@ export function EditorPage() {
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const [titleValue, setTitleValue] = useState('')
   const [demoDataLoading, setDemoDataLoading] = useState(false)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
   const titleInputRef = useRef(null)
 
   // Ensure we use the correct resume based on URL parameter
@@ -634,6 +636,38 @@ export function EditorPage() {
               </div>
               <span className="text-xs font-medium text-slate-500 ml-1">Live Preview</span>
             </div>
+            
+            {/* Page Navigation */}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="flex items-center justify-center w-7 h-7 rounded-lg text-slate-400 disabled:opacity-30 hover:bg-slate-200 hover:text-slate-600 transition-colors"
+                title="Previous page"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+              </button>
+              
+              <div className="flex items-center gap-1 text-[11px] font-medium text-slate-600 bg-white border border-slate-300 rounded-lg px-2.5 py-1">
+                <span className="font-semibold">{currentPage}</span>
+                <span className="text-slate-400">/</span>
+                <span className="font-semibold">{totalPages}</span>
+              </div>
+              
+              <button
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className="flex items-center justify-center w-7 h-7 rounded-lg text-slate-400 disabled:opacity-30 hover:bg-slate-200 hover:text-slate-600 transition-colors"
+                title="Next page"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+            </div>
+            
             <div className="flex items-center gap-1.5">
               <div className="flex items-center gap-1 text-[11px] font-medium text-slate-500 bg-white border border-slate-200 rounded-lg px-2.5 py-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
@@ -660,6 +694,8 @@ export function EditorPage() {
               showTemplateGallery={showTemplateGallery}
               setShowTemplateGallery={setShowTemplateGallery}
               TemplateGallery={TemplateGallery}
+              currentPage={currentPage}
+              onPageCountChange={setTotalPages}
             />
           </div>
         </div>
