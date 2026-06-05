@@ -62,16 +62,19 @@ function getTemplateCSS(template) {
       letter-spacing: 0.1em;
       margin-bottom: 8px;
       color: #2563eb;
+      page-break-after: avoid;
     }
     
     .section {
       margin-bottom: 16px;
+      page-break-inside: avoid;
     }
     
     .job-title {
       font-size: 14px;
       font-weight: bold;
       color: #0f172a;
+      page-break-after: avoid;
     }
     
     .company {
@@ -105,6 +108,11 @@ function getTemplateCSS(template) {
       font-size: 12px;
       border: 1px solid #bfdbfe;
       font-weight: 500;
+    }
+    
+    .entry {
+      margin-bottom: 12px;
+      page-break-inside: avoid;
     }
   `;
 
@@ -186,10 +194,10 @@ function generateResumeHTML(resume, template) {
     }
     resume.experience.forEach(exp => {
       html += `
-        <div style="margin-bottom: 12px;">
+        <div class="entry">
           <div style="display: flex; justify-content: space-between; align-items: flex-start;">
             <div class="job-title">${exp.title || exp.jobTitle}</div>
-            <div class="date">${exp.startDate} - ${exp.endDate}</div>
+            <div class="date">${exp.startDate}${exp.endDate ? ` - ${exp.endDate}` : ''}</div>
           </div>
           <div class="company">${exp.company}</div>
           ${exp.description ? `<div class="description">${exp.description}</div>` : ''}
@@ -207,7 +215,7 @@ function generateResumeHTML(resume, template) {
     }
     resume.education.forEach(edu => {
       html += `
-        <div style="margin-bottom: 12px;">
+        <div class="entry">
           <div style="display: flex; justify-content: space-between; align-items: flex-start;">
             <div class="job-title">${edu.degree}</div>
             ${edu.graduationDate ? `<div class="date">${edu.graduationDate}</div>` : ''}
@@ -229,7 +237,7 @@ function generateResumeHTML(resume, template) {
     if (template === 'modern') {
       html += '<div>';
       resume.skills.forEach(skill => {
-        html += `<span class="skill-badge">${skill.name}</span>`;
+        html += `<span class="skill-badge">${skill.name}${skill.level ? ` · ${skill.level}` : ''}</span>`;
       });
       html += '</div>';
     } else if (template === 'classic') {
@@ -237,6 +245,76 @@ function generateResumeHTML(resume, template) {
     } else {
       html += `<div class="skill">${resume.skills.map(s => s.name).join(' / ')}</div>`;
     }
+    html += '</div>';
+  }
+
+  // Projects
+  if (resume.projects && resume.projects.length > 0) {
+    html += '<div class="section">';
+    if (template !== 'minimal') {
+      html += '<div class="section-header">Projects</div>';
+    }
+    resume.projects.forEach(proj => {
+      html += `
+        <div class="entry">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+            <div class="job-title">${proj.name}</div>
+            ${proj.link ? `<div class="date">${proj.link}</div>` : ''}
+          </div>
+          ${proj.technologies ? `<div class="company">${proj.technologies}</div>` : ''}
+          ${proj.description ? `<div class="description">${proj.description}</div>` : ''}
+        </div>
+      `;
+    });
+    html += '</div>';
+  }
+
+  // Certifications
+  if (resume.certifications && resume.certifications.length > 0) {
+    html += '<div class="section">';
+    if (template !== 'minimal') {
+      html += '<div class="section-header">Certifications</div>';
+    }
+    resume.certifications.forEach(cert => {
+      html += `
+        <div class="entry">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+            <div class="job-title">${cert.name}</div>
+            <div class="date">${cert.issuer}${cert.date ? `, ${cert.date}` : ''}</div>
+          </div>
+        </div>
+      `;
+    });
+    html += '</div>';
+  }
+
+  // Languages
+  if (resume.languages && resume.languages.length > 0) {
+    html += '<div class="section">';
+    if (template !== 'minimal') {
+      html += '<div class="section-header">Languages</div>';
+    }
+    const languagesStr = resume.languages.map(l => `${l.name}${l.proficiency ? ` (${l.proficiency})` : ''}`).join(' • ');
+    html += `<div class="description">${languagesStr}</div>`;
+    html += '</div>';
+  }
+
+  // Awards
+  if (resume.awards && resume.awards.length > 0) {
+    html += '<div class="section">';
+    if (template !== 'minimal') {
+      html += '<div class="section-header">Awards</div>';
+    }
+    resume.awards.forEach(award => {
+      html += `
+        <div class="entry">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+            <div class="job-title">${award.title}</div>
+            <div class="date">${award.issuer}${award.date ? `, ${award.date}` : ''}</div>
+          </div>
+        </div>
+      `;
+    });
     html += '</div>';
   }
 

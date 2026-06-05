@@ -100,7 +100,15 @@ export function EditorPage() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const [titleValue, setTitleValue] = useState('')
+  const [demoDataLoading, setDemoDataLoading] = useState(false)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
   const titleInputRef = useRef(null)
+
+  // Ensure we use the correct resume based on URL parameter
+  const currentResume = resumeId 
+    ? resumes.find(r => r.meta.id === resumeId) || resume 
+    : resume
 
   useEffect(() => {
     if (resumeId && activeResumeId !== resumeId) {
@@ -109,8 +117,8 @@ export function EditorPage() {
   }, [resumeId, activeResumeId, setActiveResumeId])
 
   useEffect(() => {
-    if (resume?.meta?.title) setTitleValue(resume.meta.title)
-  }, [resume?.meta?.title])
+    if (currentResume?.meta?.title) setTitleValue(currentResume.meta.title)
+  }, [currentResume?.meta?.title])
 
   useEffect(() => {
     if (isEditingTitle && titleInputRef.current) {
@@ -155,7 +163,7 @@ export function EditorPage() {
   ]
 
   const allSections = sectionGroups.flatMap(g => g.sections)
-  const selectedTemplate = resume?.meta?.template || 'modern'
+  const selectedTemplate = currentResume?.meta?.template || 'modern'
 
   const handleDownload = () => setShowPreviewModal(true)
 
@@ -164,7 +172,7 @@ export function EditorPage() {
       const response = await fetch('http://localhost:3001/api/pdf/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ resume, template: selectedTemplate })
+        body: JSON.stringify({ resume: currentResume, template: selectedTemplate })
       })
       if (!response.ok) throw new Error('Failed to generate PDF')
       const blob = await response.blob()
@@ -183,18 +191,106 @@ export function EditorPage() {
     }
   }
 
-  const handleAutoFill = () => {
-    updatePersonalInfo({ fullName: 'Alex Johnson', email: 'alex@example.com', phone: '(555) 123-4567', address: 'San Francisco, CA' })
-    addLink({ label: 'LinkedIn', url: 'linkedin.com/in/alexjohnson' })
-    addLink({ label: 'Portfolio', url: 'alexjohnson.dev' })
-    updateProfessionalInfo({ jobTitle: 'Senior Product Designer', industry: 'Technology', yearsExperience: '6+', seniority: 'senior', keyAchievements: 'Led design of products used by 2M+ users' })
-    updateSummary('Results-driven Senior Product Designer with 6+ years crafting intuitive digital experiences. Proven track record of increasing user engagement and driving business outcomes through thoughtful design.')
-    addSkill({ name: 'Figma', category: 'Design', level: 'Expert' })
-    addSkill({ name: 'User Research', category: 'Design', level: 'Expert' })
-    addSkill({ name: 'Prototyping', category: 'Design', level: 'Advanced' })
-    addSkill({ name: 'React', category: 'Technical', level: 'Intermediate' })
-    addExperience({ jobTitle: 'Senior Product Designer', company: 'Acme Corp', location: 'San Francisco, CA', startDate: '2021-03', endDate: 'Present', current: true, bullets: [{ id: 'b1', text: 'Led redesign of core product, increasing DAU by 38%.' }, { id: 'b2', text: 'Managed design system used across 4 product teams.' }] })
-    addEducation({ degree: 'B.F.A. Graphic Design', school: 'Rhode Island School of Design', location: 'Providence, RI', startDate: '2014-09', endDate: '2018-05', description: 'Graduated with honors.' })
+  const handleAutoFill = async () => {
+    if (demoDataLoading) return; // Prevent multiple clicks
+    
+    try {
+      setDemoDataLoading(true);
+      
+      // Clear all existing demo-fillable sections first to prevent duplicates
+      // Remove all existing links
+      if (currentResume.personalInfo?.links?.length > 0) {
+        currentResume.personalInfo.links.forEach(link => removeLink(link.id))
+      }
+      
+      // Remove all existing skills
+      if (currentResume.skills?.length > 0) {
+        currentResume.skills.forEach(skill => removeSkill(skill.id))
+      }
+      
+      // Remove all existing experience
+      if (currentResume.experience?.length > 0) {
+        currentResume.experience.forEach(exp => removeExperience(exp.id))
+      }
+      
+      // Remove all existing education
+      if (currentResume.education?.length > 0) {
+        currentResume.education.forEach(edu => removeEducation(edu.id))
+      }
+
+      // Remove all existing projects
+      if (currentResume.projects?.length > 0) {
+        currentResume.projects.forEach(proj => removeItem('projects', proj.id))
+      }
+
+      // Remove all existing certifications
+      if (currentResume.certifications?.length > 0) {
+        currentResume.certifications.forEach(cert => removeItem('certifications', cert.id))
+      }
+
+      // Remove all existing languages
+      if (currentResume.languages?.length > 0) {
+        currentResume.languages.forEach(lang => removeItem('languages', lang.id))
+      }
+
+      // Remove all existing awards
+      if (currentResume.awards?.length > 0) {
+        currentResume.awards.forEach(award => removeItem('awards', award.id))
+      }
+      
+      // Small delay to ensure state updates
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // Now add fresh demo data
+      updatePersonalInfo({ fullName: 'Alex Johnson', email: 'alex@example.com', phone: '(555) 123-4567', address: 'San Francisco, CA' })
+      addLink({ label: 'LinkedIn', url: 'linkedin.com/in/alexjohnson' })
+      addLink({ label: 'GitHub', url: 'github.com/alexjohnson' })
+      addLink({ label: 'Portfolio', url: 'alexjohnson.dev' })
+      
+      updateProfessionalInfo({ jobTitle: 'Senior Product Designer', industry: 'Technology', yearsExperience: '6+', seniority: 'senior', keyAchievements: 'Led design of products used by 2M+ users' })
+      
+      updateSummary('Results-driven Senior Product Designer with 6+ years crafting intuitive digital experiences. Proven track record of increasing user engagement and driving business outcomes through thoughtful design.')
+      
+      // Skills (7 items)
+      addSkill({ name: 'Figma', category: 'Design', level: 'Expert' })
+      addSkill({ name: 'User Research', category: 'Design', level: 'Expert' })
+      addSkill({ name: 'Prototyping', category: 'Design', level: 'Advanced' })
+      addSkill({ name: 'Design Systems', category: 'Design', level: 'Advanced' })
+      addSkill({ name: 'Wireframing', category: 'Design', level: 'Expert' })
+      addSkill({ name: 'Accessibility (A11y)', category: 'Design', level: 'Advanced' })
+      addSkill({ name: 'Communication', category: 'Soft Skills', level: 'Expert' })
+      
+      // Experience
+      addExperience({ jobTitle: 'Senior Product Designer', company: 'Acme Corp', location: 'San Francisco, CA', startDate: '2021-03', endDate: 'Present', current: true, bullets: [{ id: 'b1', text: 'Led redesign of core product, increasing DAU by 38%.' }, { id: 'b2', text: 'Managed design system used across 4 product teams.' }] })
+      addExperience({ jobTitle: 'Product Designer', company: 'StartupXYZ', location: 'San Francisco, CA', startDate: '2019-06', endDate: '2021-02', current: false, bullets: [{ id: 'b3', text: 'Designed mobile app used by 500K+ users.' }, { id: 'b4', text: 'Collaborated with engineering to implement design system.' }] })
+      
+      // Education
+      addEducation({ degree: 'B.F.A. Graphic Design', school: 'Rhode Island School of Design', location: 'Providence, RI', startDate: '2014-09', endDate: '2018-05', description: 'Graduated with honors.' })
+      
+      // Projects
+      addItem('projects', { name: 'Design System Overhaul', description: 'Led comprehensive redesign of company design system, improving developer productivity by 45%', link: 'github.com/alexjohnson/design-system', technologies: 'Figma, React, CSS' })
+      addItem('projects', { name: 'Mobile App Redesign', description: 'Complete UX overhaul of flagship mobile app resulting in 3.2x engagement increase', link: 'alexjohnson.dev/mobile-app', technologies: 'Figma, User Research' })
+      
+      // Certifications
+      addItem('certifications', { name: 'Nielsen Norman UX Certification', issuer: 'Nielsen Norman Group', date: '2022-06' })
+      addItem('certifications', { name: 'Google UX Design Certificate', issuer: 'Google', date: '2021-12' })
+      
+      // Languages
+      addItem('languages', { name: 'English', proficiency: 'Native' })
+      addItem('languages', { name: 'Spanish', proficiency: 'Fluent' })
+      
+      // Awards
+      addItem('awards', { title: 'Design Excellence Award', issuer: 'Acme Corp', date: '2023-05' })
+      addItem('awards', { title: 'Innovation in UX', issuer: 'Tech Industry Awards', date: '2022-11' })
+      
+      // Auto-navigate to summary to show the filled data
+      setActiveSection('summary')
+      
+      setDemoDataLoading(false);
+    } catch (error) {
+      console.error('Error loading demo data:', error)
+      setDemoDataLoading(false);
+    }
   }
 
   const handleTitleChange = () => {
@@ -314,12 +410,18 @@ export function EditorPage() {
 
             <button
               onClick={handleAutoFill}
-              className="btn-ghost hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium text-slate-500 border border-slate-200"
+              disabled={demoDataLoading}
+              className={`btn-ghost hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border transition-all ${
+                demoDataLoading
+                  ? 'opacity-60 cursor-not-allowed text-slate-400 border-slate-200'
+                  : 'text-slate-500 border-slate-200 hover:bg-slate-100'
+              }`}
+              title={demoDataLoading ? 'Loading demo data...' : 'Fill form with sample data'}
             >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className={`w-3.5 h-3.5 ${demoDataLoading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
               </svg>
-              Demo data
+              {demoDataLoading ? 'Loading...' : 'Demo data'}
             </button>
 
             <button
@@ -446,7 +548,7 @@ export function EditorPage() {
           <div className="form-panel flex-1 overflow-y-auto">
             <div className="px-5 py-5 section-transition" key={activeSection}>
               <ResumeForm
-                resume={resume}
+                resume={currentResume}
                 resumes={resumes}
                 activeResumeId={activeResumeId}
                 setActiveResumeId={setActiveResumeId}
@@ -534,6 +636,38 @@ export function EditorPage() {
               </div>
               <span className="text-xs font-medium text-slate-500 ml-1">Live Preview</span>
             </div>
+            
+            {/* Page Navigation */}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="flex items-center justify-center w-7 h-7 rounded-lg text-slate-400 disabled:opacity-30 hover:bg-slate-200 hover:text-slate-600 transition-colors"
+                title="Previous page"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+              </button>
+              
+              <div className="flex items-center gap-1 text-[11px] font-medium text-slate-600 bg-white border border-slate-300 rounded-lg px-2.5 py-1">
+                <span className="font-semibold">{currentPage}</span>
+                <span className="text-slate-400">/</span>
+                <span className="font-semibold">{totalPages}</span>
+              </div>
+              
+              <button
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className="flex items-center justify-center w-7 h-7 rounded-lg text-slate-400 disabled:opacity-30 hover:bg-slate-200 hover:text-slate-600 transition-colors"
+                title="Next page"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+            </div>
+            
             <div className="flex items-center gap-1.5">
               <div className="flex items-center gap-1 text-[11px] font-medium text-slate-500 bg-white border border-slate-200 rounded-lg px-2.5 py-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
@@ -554,12 +688,14 @@ export function EditorPage() {
           {/* EditorPreview — takes ALL remaining height, no padding, no wrapper */}
           <div className="flex-1 min-h-0">
             <EditorPreview
-              resume={resume}
+              resume={currentResume}
               template={selectedTemplate}
               onTemplateChange={updateTemplate}
               showTemplateGallery={showTemplateGallery}
               setShowTemplateGallery={setShowTemplateGallery}
               TemplateGallery={TemplateGallery}
+              currentPage={currentPage}
+              onPageCountChange={setTotalPages}
             />
           </div>
         </div>
@@ -599,7 +735,7 @@ export function EditorPage() {
       {/* ══ PDF MODAL ══ */}
       <PDFPreviewModal
         isOpen={showPreviewModal}
-        resume={resume}
+        resume={currentResume}
         template={selectedTemplate}
         onConfirm={handleConfirmDownload}
         onCancel={() => setShowPreviewModal(false)}

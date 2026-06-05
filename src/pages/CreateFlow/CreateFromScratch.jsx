@@ -9,11 +9,35 @@ import { ProgressIndicator } from '../../components/creation/ProgressIndicator'
 
 const STEPS = ['Template', 'Job Target', 'Personal Info', 'Review']
 
+const DEMO_DATA = {
+  template: 'modern',
+  jobTarget: {
+    jobTitle: 'Senior Full Stack Developer',
+    industry: 'Technology / Software',
+    yearsExperience: '5-7',
+    seniority: 'senior',
+    jobDescription: 'Looking for experienced full stack developers with React, Node.js, and AWS expertise',
+    tone: 'professional',
+  },
+  personalInfo: {
+    fullName: 'Joel Rayton',
+    email: 'joel.rayton@email.com',
+    phone: '+1 (555) 123-4567',
+    address: 'San Francisco, CA',
+    links: [
+      { id: 'link-1', label: 'LinkedIn', url: 'linkedin.com/in/johnanderson' },
+      { id: 'link-2', label: 'GitHub', url: 'github.com/johnanderson' },
+      { id: 'link-3', label: 'Portfolio', url: 'johnanderson.dev' },
+    ],
+  },
+}
+
 export function CreateFromScratch() {
   const { goToDashboard, goToEditor } = useRouting()
-  const { createResume } = useResume()
+  const { createResumeWithData, resumes, flushStorage } = useResume()
   const [currentStep, setCurrentStep] = useState(1)
   const [scrolled, setScrolled] = useState(false)
+  const [pendingNavigation, setPendingNavigation] = useState(null)
   const [formData, setFormData] = useState({
     template: 'modern',
     jobTarget: {
@@ -32,6 +56,19 @@ export function CreateFromScratch() {
       links: [],
     },
   })
+
+  // Watch for new resume creation and navigate when it appears
+  useEffect(() => {
+    if (pendingNavigation && resumes.some(r => r.meta.id === pendingNavigation)) {
+      // Flush storage to ensure EditorPage can load the resume from localStorage
+      flushStorage()
+      // Small delay to ensure flush completes before navigation
+      setTimeout(() => {
+        goToEditor(pendingNavigation)
+        setPendingNavigation(null)
+      }, 50)
+    }
+  }, [pendingNavigation, resumes, goToEditor, flushStorage])
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20)
@@ -55,10 +92,15 @@ export function CreateFromScratch() {
 
   const handleCreate = async () => {
     try {
-      const newResume = createResume('New Resume')
-      // Update the resume with the form data
-      // This would need to be implemented by calling update functions from useResume
-      goToEditor(newResume.meta.id)
+      // Create resume with all form data in one call
+      const newResume = createResumeWithData('New Resume', {
+        template: formData.template,
+        personalInfo: formData.personalInfo,
+        professionalInfo: formData.jobTarget, // jobTarget maps to professionalInfo
+      })
+      
+      // Store ID for navigation - useEffect will handle navigation when resume appears in state
+      setPendingNavigation(newResume.meta.id)
     } catch (error) {
       console.error('Error creating resume:', error)
       alert('Failed to create resume. Please try again.')
@@ -76,6 +118,10 @@ export function CreateFromScratch() {
       default:
         return true
     }
+  }
+
+  const handleLoadDemoData = () => {
+    setFormData(DEMO_DATA)
   }
 
   return (
@@ -111,6 +157,13 @@ export function CreateFromScratch() {
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
+          </button>
+          <button 
+            onClick={handleLoadDemoData}
+            className="ml-3 px-3 py-1.5 text-xs font-medium text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+            title="Load demo data for testing"
+          >
+            📋 Demo
           </button>
         </div>
       </nav>

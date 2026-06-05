@@ -14,10 +14,13 @@ export function EditorPreview({
   showTemplateGallery,
   setShowTemplateGallery,
   TemplateGallery,
+  currentPage = 1,
+  onPageCountChange,
 }) {
   const selectedTemplate = template || 'modern'
   const panelRef = useRef(null)
   const [scale, setScale] = useState(1)
+  const [localTotalPages, setLocalTotalPages] = useState(1)
 
   useEffect(() => {
     const el = panelRef.current
@@ -120,14 +123,26 @@ export function EditorPreview({
           }}
         >
           {/* flow wrapper — sized to scaled paper height */}
-          <div style={{ position: 'relative', width: A4_WIDTH * scale }}>
+          <div style={{ position: 'relative', width: A4_WIDTH * scale, minHeight: A4_HEIGHT * scale }}>
 
             {/* THE PAPER */}
             <div
               className="cv-paper"
-              style={{ width: A4_WIDTH, transform: `scale(${scale})` }}
+              style={{ 
+                width: A4_WIDTH, 
+                height: A4_HEIGHT, 
+                transform: `scale(${scale})` 
+              }}
             >
-              <ResumePreview resume={resume} template={selectedTemplate} />
+              <ResumePreview 
+                resume={resume} 
+                template={selectedTemplate}
+                currentPage={currentPage}
+                onPageCountChange={(pageCount) => {
+                  setLocalTotalPages(pageCount)
+                  if (onPageCountChange) onPageCountChange(pageCount)
+                }}
+              />
             </div>
           </div>
         </div>
