@@ -14,10 +14,13 @@ export function EditorPreview({
   showTemplateGallery,
   setShowTemplateGallery,
   TemplateGallery,
+  currentPage = 1,
+  onPageCountChange,
 }) {
   const selectedTemplate = template || 'modern'
   const panelRef = useRef(null)
   const [scale, setScale] = useState(1)
+  const [localTotalPages, setLocalTotalPages] = useState(1)
 
   useEffect(() => {
     const el = panelRef.current
@@ -131,7 +134,15 @@ export function EditorPreview({
                 transform: `scale(${scale})` 
               }}
             >
-              <ResumePreview resume={resume} template={selectedTemplate} />
+              <ResumePreview 
+                resume={resume} 
+                template={selectedTemplate}
+                currentPage={currentPage}
+                onPageCountChange={(pageCount) => {
+                  setLocalTotalPages(pageCount)
+                  if (onPageCountChange) onPageCountChange(pageCount)
+                }}
+              />
             </div>
           </div>
         </div>
