@@ -286,16 +286,20 @@ export function ResumePreview({ resume, template = 'modern', currentPage = 1, on
         ref={measureRef}
         aria-hidden="true"
         style={{
-          position: 'absolute',
+          // position:fixed takes this out of all parent stacking/clipping contexts
+          // so overflow:hidden on the page wrapper doesn't affect it.
+          // The element is still in the DOM and laid out at the specified width,
+          // so offsetHeight returns the correct rendered height.
+          position: 'fixed',
           left: '-9999px',
           top: '0px',
           width: `${A4_W - margins.left - margins.right}px`,
           pointerEvents: 'none',
+          visibility: 'hidden',
           fontFamily: font,
           fontSize: '12px',
-          // No padding here — we subtract margins from width already
           boxSizing: 'border-box',
-          zIndex: -1,
+          zIndex: -9999,
         }}
       >
         {all.map((e, i) => (
@@ -356,8 +360,10 @@ export function ResumePreview({ resume, template = 'modern', currentPage = 1, on
   };
 
   // ── Page wrapper style ────────────────────────────────────────────────────
+  // Strict A4 height + overflow:hidden = content can NEVER bleed past the paper edge.
+  // MeasurePane is rendered as a sibling fragment OUTSIDE this div so it is
+  // not clipped and its offsetHeight reads correctly.
   const pageStyle = (extra = {}) => ({
-    position: 'relative',         // needed so MeasurePane absolute positioning works
     fontFamily: font,
     fontSize: '12px',
     paddingTop:    margins.top,
@@ -366,7 +372,8 @@ export function ResumePreview({ resume, template = 'modern', currentPage = 1, on
     paddingLeft:   margins.left,
     width: '100%',
     boxSizing: 'border-box',
-    minHeight: `${A4_H}px`,      // minHeight so page doesn't collapse; content is budgeted
+    height: `${A4_H}px`,          // strict A4 — never grows
+    overflow: 'hidden',            // clips anything beyond the page boundary
     backgroundColor: 'white',
     ...extra,
   });
@@ -414,97 +421,107 @@ export function ResumePreview({ resume, template = 'modern', currentPage = 1, on
   if (template === 'modern') {
     const h = 'text-sm font-bold mb-2 uppercase tracking-widest';
     return (
-      <div style={pageStyle()}>
+      <>
         <MeasurePane headingClass={h} />
-        {currentPage === 1 && <ModernHeader />}
-        <PageContent headingClass={h} />
-      </div>
+        <div style={pageStyle()}>
+          {currentPage === 1 && <ModernHeader />}
+          <PageContent headingClass={h} />
+        </div>
+      </>
     );
   }
 
   if (template === 'classic') {
     const h = 'text-sm font-bold mb-2 uppercase tracking-widest border-b pb-1';
     return (
-      <div style={pageStyle()}>
+      <>
         <MeasurePane headingClass={h} />
-        {currentPage === 1 && (
-          <div className="text-center border-b-2 pb-4 mb-4" style={{ borderColor: theme.accentColor }}>
-            <h1 className="text-3xl font-bold text-slate-900 mb-2 uppercase tracking-wide">{personalInfo.fullName || 'Your Name'}</h1>
-            <div className="flex flex-wrap justify-center gap-x-2 gap-y-1 text-sm text-slate-700">
-              {personalInfo.email && <span>{personalInfo.email}</span>}
-              {personalInfo.phone && <span>| {personalInfo.phone}</span>}
-              {personalInfo.address && <span>| {personalInfo.address}</span>}
-              {links.map(l => <span key={l.id}>| {l.url || l.label}</span>)}
+        <div style={pageStyle()}>
+          {currentPage === 1 && (
+            <div className="text-center border-b-2 pb-4 mb-4" style={{ borderColor: theme.accentColor }}>
+              <h1 className="text-3xl font-bold text-slate-900 mb-2 uppercase tracking-wide">{personalInfo.fullName || 'Your Name'}</h1>
+              <div className="flex flex-wrap justify-center gap-x-2 gap-y-1 text-sm text-slate-700">
+                {personalInfo.email && <span>{personalInfo.email}</span>}
+                {personalInfo.phone && <span>| {personalInfo.phone}</span>}
+                {personalInfo.address && <span>| {personalInfo.address}</span>}
+                {links.map(l => <span key={l.id}>| {l.url || l.label}</span>)}
+              </div>
             </div>
-          </div>
-        )}
-        <PageContent headingClass={h} />
-      </div>
+          )}
+          <PageContent headingClass={h} />
+        </div>
+      </>
     );
   }
 
   if (template === 'minimal') {
     const h = 'text-xs font-semibold uppercase tracking-widest mb-1';
     return (
-      <div style={pageStyle()}>
+      <>
         <MeasurePane headingClass={h} />
-        {currentPage === 1 && (
-          <div className="mb-4">
-            <h1 className="text-2xl font-light text-slate-900 mb-2 tracking-wide">{personalInfo.fullName || 'Your Name'}</h1>
-            <div className="flex flex-wrap gap-2 text-xs uppercase tracking-widest" style={{ color: theme.accentColor }}>
-              {personalInfo.email && <span>{personalInfo.email}</span>}
-              {personalInfo.phone && <span>• {personalInfo.phone}</span>}
-              {personalInfo.address && <span>• {personalInfo.address}</span>}
-              {links.map(l => <span key={l.id}>• {l.url || l.label}</span>)}
+        <div style={pageStyle()}>
+          {currentPage === 1 && (
+            <div className="mb-4">
+              <h1 className="text-2xl font-light text-slate-900 mb-2 tracking-wide">{personalInfo.fullName || 'Your Name'}</h1>
+              <div className="flex flex-wrap gap-2 text-xs uppercase tracking-widest" style={{ color: theme.accentColor }}>
+                {personalInfo.email && <span>{personalInfo.email}</span>}
+                {personalInfo.phone && <span>• {personalInfo.phone}</span>}
+                {personalInfo.address && <span>• {personalInfo.address}</span>}
+                {links.map(l => <span key={l.id}>• {l.url || l.label}</span>)}
+              </div>
             </div>
-          </div>
-        )}
-        <PageContent headingClass={h} />
-      </div>
+          )}
+          <PageContent headingClass={h} />
+        </div>
+      </>
     );
   }
 
   if (template === 'ats-safe') {
     const h = 'text-sm font-bold mb-2 uppercase tracking-widest';
     return (
-      <div style={pageStyle({ fontFamily: 'Arial, sans-serif' })}>
+      <>
         <MeasurePane headingClass={h} />
-        {currentPage === 1 && (
-          <div className="mb-4" style={{ borderBottom: `2px solid ${theme.accentColor}`, paddingBottom: '1rem' }}>
-            <h1 className="text-2xl font-bold text-slate-900 mb-2">{personalInfo.fullName || 'Your Name'}</h1>
-            <div className="flex flex-wrap gap-3 text-sm text-slate-600">
-              {personalInfo.email && <span>{personalInfo.email}</span>}
-              {personalInfo.phone && <span>| {personalInfo.phone}</span>}
-              {personalInfo.address && <span>| {personalInfo.address}</span>}
-              {links.map(l => <span key={l.id}>| {l.url || l.label}</span>)}
+        <div style={pageStyle({ fontFamily: 'Arial, sans-serif' })}>
+          {currentPage === 1 && (
+            <div className="mb-4" style={{ borderBottom: `2px solid ${theme.accentColor}`, paddingBottom: '1rem' }}>
+              <h1 className="text-2xl font-bold text-slate-900 mb-2">{personalInfo.fullName || 'Your Name'}</h1>
+              <div className="flex flex-wrap gap-3 text-sm text-slate-600">
+                {personalInfo.email && <span>{personalInfo.email}</span>}
+                {personalInfo.phone && <span>| {personalInfo.phone}</span>}
+                {personalInfo.address && <span>| {personalInfo.address}</span>}
+                {links.map(l => <span key={l.id}>| {l.url || l.label}</span>)}
+              </div>
             </div>
-          </div>
-        )}
-        <PageContent headingClass={h} />
-      </div>
+          )}
+          <PageContent headingClass={h} />
+        </div>
+      </>
     );
   }
 
   if (template === 'creative') {
     const h = 'text-sm font-bold mb-2 uppercase tracking-widest';
     return (
-      <div style={{ ...pageStyle({ backgroundColor: theme.accentColor }), display:'flex', flexDirection:'column' }}>
+      <>
         <MeasurePane headingClass={h} />
-        {currentPage === 1 && (
-          <div className="bg-white rounded-lg p-6 mb-4 shadow-lg">
-            <h1 className="text-3xl font-bold text-slate-900 mb-2">{personalInfo.fullName || 'Your Name'}</h1>
-            <div className="flex flex-wrap gap-3 text-sm text-slate-600">
-              {personalInfo.email && <span>{personalInfo.email}</span>}
-              {personalInfo.phone && <span>• {personalInfo.phone}</span>}
-              {personalInfo.address && <span>• {personalInfo.address}</span>}
-              {links.map(l => <span key={l.id}>• {l.url || l.label}</span>)}
+        <div style={{ ...pageStyle({ backgroundColor: theme.accentColor }), display:'flex', flexDirection:'column' }}>
+          {currentPage === 1 && (
+            <div className="bg-white rounded-lg p-6 mb-4 shadow-lg">
+              <h1 className="text-3xl font-bold text-slate-900 mb-2">{personalInfo.fullName || 'Your Name'}</h1>
+              <div className="flex flex-wrap gap-3 text-sm text-slate-600">
+                {personalInfo.email && <span>{personalInfo.email}</span>}
+                {personalInfo.phone && <span>• {personalInfo.phone}</span>}
+                {personalInfo.address && <span>• {personalInfo.address}</span>}
+                {links.map(l => <span key={l.id}>• {l.url || l.label}</span>)}
+              </div>
             </div>
+          )}
+          <div className="bg-white rounded-lg shadow-lg p-6 flex-1 overflow-hidden">
+            <PageContent headingClass={h} />
           </div>
-        )}
-        <div className="bg-white rounded-lg shadow-lg p-6 flex-1">
-          <PageContent headingClass={h} />
         </div>
-      </div>
+      </>
     );
   }
 
@@ -513,9 +530,10 @@ export function ResumePreview({ resume, template = 'modern', currentPage = 1, on
     const leftSections  = orderedSections.filter(s => ['summary','experience','education'].includes(s));
     const rightSections = orderedSections.filter(s => ['skills','projects','certifications','languages','awards'].includes(s));
     return (
-      <div style={pageStyle({ fontSize: '11px' })}>
+      <>
         <MeasurePane headingClass={h} />
-        {currentPage === 1 && (
+        <div style={pageStyle({ fontSize: '11px' })}>
+          {currentPage === 1 && (
           <div className="flex gap-4 mb-4" style={{ borderBottom:`2px solid ${theme.accentColor}`, paddingBottom:'1rem' }}>
             <div className="w-2/3">
               <h1 className="text-2xl font-bold text-slate-900 mb-2">{personalInfo.fullName || 'Your Name'}</h1>
@@ -534,17 +552,20 @@ export function ResumePreview({ resume, template = 'modern', currentPage = 1, on
           <div className="w-2/3"><PageContent headingClass={h} sections={leftSections} /></div>
           <div className="w-1/3"><PageContent headingClass={h} sections={rightSections} /></div>
         </div>
-      </div>
+        </div>
+      </>
     );
   }
 
   // default = modern
   const h = 'text-sm font-bold mb-2 uppercase tracking-widest';
   return (
-    <div style={pageStyle()}>
+    <>
       <MeasurePane headingClass={h} />
-      {currentPage === 1 && <ModernHeader />}
-      <PageContent headingClass={h} />
-    </div>
+      <div style={pageStyle()}>
+        {currentPage === 1 && <ModernHeader />}
+        <PageContent headingClass={h} />
+      </div>
+    </>
   );
 }
