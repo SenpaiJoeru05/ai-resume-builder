@@ -1,11 +1,10 @@
 // EditorPreview.jsx
-
-import { useRef, useEffect, useState } from 'react'
+import { useRef, useEffect, useState, useCallback } from 'react'
 import { ResumePreview } from '../ResumePreview'
 
-const A4_WIDTH  = 794
-const A4_HEIGHT = 1123
-const SIDE_PAD  = 48
+const A4_W    = 794
+const A4_H    = 1123
+const SIDE_PAD = 48
 
 export function EditorPreview({
   resume,
@@ -16,18 +15,20 @@ export function EditorPreview({
   TemplateGallery,
   currentPage = 1,
   onPageCountChange,
+  onPageChange,
 }) {
   const selectedTemplate = template || 'modern'
   const panelRef = useRef(null)
-  const [scale, setScale] = useState(1)
-  const [localTotalPages, setLocalTotalPages] = useState(1)
+  const [scale, setScale]       = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
 
+  // Fit the A4 paper width into the available panel width
   useEffect(() => {
     const el = panelRef.current
     if (!el) return
     const update = () => {
       const available = el.clientWidth - SIDE_PAD * 2
-      setScale(Math.min(1, available / A4_WIDTH))
+      setScale(Math.min(1, available / A4_W))
     }
     update()
     const ro = new ResizeObserver(update)
@@ -35,122 +36,133 @@ export function EditorPreview({
     return () => ro.disconnect()
   }, [])
 
-  const scaledMinH = A4_HEIGHT * scale
+  const handlePageCount = useCallback((n) => {
+    setTotalPages(n)
+    onPageCountChange?.(n)
+  }, [onPageCountChange])
 
   return (
     <div className="w-full h-full flex flex-col" style={{ fontFamily: 'inherit' }}>
       <style>{`
-        /* full-bleed dot-grid canvas */
+        /* dot-grid canvas */
         .cv-canvas {
-          background-color: #ffffff;
-          background-image: radial-gradient(circle, #E2E8F0 1px, transparent 1px);
+          background-color: #f0f2f7;
+          background-image: radial-gradient(circle, #c8cfdc 1px, transparent 1px);
           background-size: 20px 20px;
         }
-        /* very soft centre spotlight so the paper area feels lit */
+        /* subtle inner glow */
         .cv-canvas-inner {
           background: radial-gradient(
-            ellipse 70% 60% at 50% 30%,
-            rgba(99,102,241,0.05) 0%,
+            ellipse 80% 50% at 50% 20%,
+            rgba(99,102,241,0.04) 0%,
             transparent 70%
           );
         }
-        /* floating paper */
+        /* the paper card */
         .cv-paper {
           background: #ffffff;
-          transform-origin: top left;
+          transform-origin: top center;
           border-radius: 2px;
           box-shadow:
-            0 1px 3px  rgba(0,0,0,0.12),
-            0 4px 16px rgba(0,0,0,0.1),
-            0 16px 48px rgba(0,0,0,0.08),
-            0 40px 80px rgba(0,0,0,0.05),
-            0 0 0 0.5px rgba(0,0,0,0.05);
-          overflow: visible;
-        }
-        /* thin dashed page-break line */
-        .cv-pagebreak {
-          position: absolute;
-          left: 0; right: 0;
-          border-top: 1px dashed rgba(148,155,255,0.2);
-          pointer-events: none;
-        }
-        /* page label pill */
-        .cv-page-label {
-          position: absolute;
-          left: 50%;
-          transform: translateX(-50%);
-          bottom: -26px;
-          background: rgba(255,255,255,0.05);
-          border: 1px solid rgba(255,255,255,0.1);
-          color: rgba(180,185,255,0.5);
-          font-size: 10px;
-          font-weight: 600;
-          letter-spacing: 0.07em;
-          padding: 2px 10px;
-          border-radius: 99px;
-          white-space: nowrap;
-          pointer-events: none;
-          user-select: none;
+            0 1px 2px  rgba(0,0,0,0.08),
+            0 4px 12px rgba(0,0,0,0.08),
+            0 16px 40px rgba(0,0,0,0.07),
+            0 32px 64px rgba(0,0,0,0.05),
+            0 0 0 0.5px rgba(0,0,0,0.06);
+          overflow: hidden;
         }
         /* scrollbar */
-        .cv-canvas::-webkit-scrollbar { width: 4px; }
+        .cv-canvas::-webkit-scrollbar { width: 5px; }
         .cv-canvas::-webkit-scrollbar-track { background: transparent; }
         .cv-canvas::-webkit-scrollbar-thumb {
-          background: rgba(148,155,255,0.25);
+          background: rgba(148,155,200,0.3);
           border-radius: 99px;
         }
-        /* modal */
+        .cv-canvas::-webkit-scrollbar-thumb:hover {
+          background: rgba(148,155,200,0.5);
+        }
+        /* template gallery modal */
         @keyframes cvModalIn {
           from { opacity:0; transform:scale(0.94) translateY(12px); }
           to   { opacity:1; transform:scale(1)    translateY(0); }
         }
       `}</style>
 
-      {/* ══ CANVAS ══ */}
+      {/* ══ SCROLLABLE CANVAS ══ */}
       <div
         ref={panelRef}
         className="cv-canvas flex-1 overflow-y-auto overflow-x-hidden"
-        style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(148,155,255,0.25) transparent' }}
+        style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(148,155,200,0.3) transparent' }}
       >
-        {/* inner spotlight layer */}
         <div
           className="cv-canvas-inner"
           style={{
-            padding: `${SIDE_PAD}px`,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
+            padding:         `${SIDE_PAD}px ${SIDE_PAD}px ${SIDE_PAD * 2}px`,
+            display:         'flex',
+            flexDirection:   'column',
+            alignItems:      'center',
+            minHeight:       '100%',
           }}
         >
-          {/* flow wrapper — sized to scaled paper height */}
-          <div style={{ position: 'relative', width: A4_WIDTH * scale, minHeight: A4_HEIGHT * scale }}>
-
-            {/* THE PAPER */}
+          {/*
+            Flow wrapper — reserves exactly the scaled paper footprint so
+            the scrollable area sizes correctly.
+            The paper itself is full A4 width, CSS-scaled down to fit.
+          */}
+          <div
+            style={{
+              position:  'relative',
+              width:     A4_W * scale,
+              height:    A4_H * scale,
+              flexShrink: 0,
+            }}
+          >
             <div
               className="cv-paper"
-              style={{ 
-                width: A4_WIDTH, 
-                height: A4_HEIGHT, 
-                transform: `scale(${scale})` 
+              style={{
+                width:           A4_W,
+                height:          A4_H,
+                transform:       `scale(${scale})`,
+                transformOrigin: 'top left',
+                position:        'absolute',
+                top:             0,
+                left:            0,
               }}
             >
-              <ResumePreview 
-                resume={resume} 
+              <ResumePreview
+                resume={resume}
                 template={selectedTemplate}
                 currentPage={currentPage}
-                onPageCountChange={(pageCount) => {
-                  setLocalTotalPages(pageCount)
-                  if (onPageCountChange) onPageCountChange(pageCount)
-                }}
+                onPageCountChange={handlePageCount}
               />
             </div>
           </div>
-        </div>
-      </div>
 
-      {/* print footer */}
-      <div className="hidden print:block text-xs text-center py-1">
-        Page <span className="page-number" />
+          {/* Page indicator pill below the paper */}
+          {totalPages > 1 && (
+            <div
+              style={{
+                marginTop:    16 * scale,
+                display:      'flex',
+                alignItems:   'center',
+                gap:          6,
+                background:   'rgba(255,255,255,0.7)',
+                backdropFilter: 'blur(8px)',
+                border:       '1px solid rgba(200,207,220,0.6)',
+                borderRadius: 99,
+                padding:      '4px 12px',
+                fontSize:     11,
+                fontWeight:   600,
+                color:        '#64748b',
+                letterSpacing: '0.04em',
+                userSelect:   'none',
+              }}
+            >
+              <span style={{ color: '#6366f1' }}>●</span>
+              Page {currentPage} of {totalPages}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* ══ TEMPLATE GALLERY MODAL ══ */}

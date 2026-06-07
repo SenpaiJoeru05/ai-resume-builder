@@ -22,8 +22,8 @@ function getTemplateCSS(template) {
     
     .container {
       padding: 0.5in 1in 1in 1in;
-      width: 816px;
-      max-width: 816px;
+      width: 794px;
+      max-width: 794px;
       position: relative;
     }
     
@@ -348,7 +348,7 @@ router.post('/generate', async (req, res) => {
     
     // Generate PDF
     const pdfBuffer = await page.pdf({
-      format: 'Letter',
+      format: 'A4',
       margin: {
         top: '0',
         right: '0',
