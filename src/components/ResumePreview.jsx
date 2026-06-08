@@ -7,17 +7,21 @@ const SKILL_ORDER = ['Technical', 'Tools', 'Soft Skills', 'Languages', 'Other'];
 const A4_W = 794;
 const A4_H = 1123;
 
-// Margins in px — used for both CSS padding and paginator budget
+// ─── Professional resume margins (96 dpi: 0.75in = 72px) ─────────────────────
 const MARGINS = {
-  comfortable: { top: 48, right: 96, bottom: 96, left: 96 },
-  compact:     { top: 29, right: 72, bottom: 72, left: 72  },
+  comfortable: { top: 72, right: 72, bottom: 72, left: 72 },
+  compact:     { top: 48, right: 54, bottom: 48, left: 54 },
 };
 
-// Approx height of the name/contact header on page 1 (measured empirically)
+// Height of the footer strip that sits inside the bottom margin.
+// MUST be subtracted from the paginator budget so content never overlaps it.
+const FOOTER_H = 24;
+
+// Approx height of the name/contact header on page 1
 const HEADER_H = 100;
 // Gap between entries (px)
 const ENTRY_GAP = 8;
-// Gap between sections (mb-4 = 16px)  
+// Gap between sections
 const SECTION_GAP = 16;
 
 const FONT_FAMILIES = {
@@ -54,7 +58,6 @@ export function ResumePreview({ resume, template = 'modern', currentPage = 1, on
 
   const theme   = meta.theme || { accentColor: '#2563eb', font: 'sans', density: 'comfortable' };
   const margins = MARGINS[theme.density] ?? MARGINS.comfortable;
-  const csspad  = `${margins.top}px ${margins.right}px ${margins.bottom}px ${margins.left}px`;
   const font    = FONT_FAMILIES[theme.font] ?? FONT_FAMILIES.sans;
   const links   = (personalInfo.links || []).filter(l => l.url || l.label);
 
@@ -71,9 +74,6 @@ export function ResumePreview({ resume, template = 'modern', currentPage = 1, on
                .filter(([,items]) => items.length);
 
   // ── Build flat entry list ─────────────────────────────────────────────────
-  // Each entry = one renderable row (one job, one project, one edu, etc.)
-  // The section heading is INCLUDED in the first entry of each section so it
-  // gets measured together and breaks together.
   const buildEntries = (headingClass) => {
     const entries = [];
     const add = (sectionKey, isFirst, node, id) =>
@@ -88,10 +88,9 @@ export function ResumePreview({ resume, template = 'modern', currentPage = 1, on
           </div>,
           'summary-0');
       }
-
       else if (sk === 'experience' && experience.length) {
         experience.forEach((exp, i) => {
-          const node = (
+          add(sk, i === 0, (
             <div>
               {i === 0 && <h2 className={headingClass}>{labelFor(sk)}</h2>}
               <div className="text-xs text-slate-700 leading-relaxed">
@@ -107,14 +106,12 @@ export function ResumePreview({ resume, template = 'modern', currentPage = 1, on
                 <div className="mt-1"><ExpBody exp={exp} /></div>
               </div>
             </div>
-          );
-          add(sk, i === 0, node, `exp-${exp.id}`);
+          ), `exp-${exp.id}`);
         });
       }
-
       else if (sk === 'education' && education.length) {
         education.forEach((edu, i) => {
-          const node = (
+          add(sk, i === 0, (
             <div>
               {i === 0 && <h2 className={headingClass}>{labelFor(sk)}</h2>}
               <div>
@@ -128,14 +125,12 @@ export function ResumePreview({ resume, template = 'modern', currentPage = 1, on
                 {edu.field && <p className="text-slate-700 text-xs">Field of Study: {edu.field}</p>}
               </div>
             </div>
-          );
-          add(sk, i === 0, node, `edu-${edu.id}`);
+          ), `edu-${edu.id}`);
         });
       }
-
       else if (sk === 'skills' && skills.length) {
         const groups = skillGroups();
-        add(sk, true,
+        add(sk, true, (
           <div>
             <h2 className={headingClass}>{labelFor(sk)}</h2>
             <div className="space-y-2">
@@ -153,13 +148,12 @@ export function ResumePreview({ resume, template = 'modern', currentPage = 1, on
                 </div>
               ))}
             </div>
-          </div>,
-          'skills-0');
+          </div>
+        ), 'skills-0');
       }
-
       else if (sk === 'projects' && projects.length) {
         projects.forEach((p, i) => {
-          const node = (
+          add(sk, i === 0, (
             <div>
               {i === 0 && <h2 className={headingClass}>{labelFor(sk)}</h2>}
               <div>
@@ -171,14 +165,12 @@ export function ResumePreview({ resume, template = 'modern', currentPage = 1, on
                 {p.description  && <p className="text-slate-700 text-xs leading-relaxed">{p.description}</p>}
               </div>
             </div>
-          );
-          add(sk, i === 0, node, `proj-${p.id}`);
+          ), `proj-${p.id}`);
         });
       }
-
       else if (sk === 'certifications' && certifications.length) {
         certifications.forEach((c, i) => {
-          const node = (
+          add(sk, i === 0, (
             <div>
               {i === 0 && <h2 className={headingClass}>{labelFor(sk)}</h2>}
               <div className="flex justify-between items-start">
@@ -188,25 +180,22 @@ export function ResumePreview({ resume, template = 'modern', currentPage = 1, on
                 </span>
               </div>
             </div>
-          );
-          add(sk, i === 0, node, `cert-${c.id}`);
+          ), `cert-${c.id}`);
         });
       }
-
       else if (sk === 'languages' && languages.length) {
-        add(sk, true,
+        add(sk, true, (
           <div>
             <h2 className={headingClass}>{labelFor(sk)}</h2>
             <p className="text-slate-700 text-xs">
               {languages.map(l => `${l.name}${l.proficiency ? ` (${l.proficiency})` : ''}`).join('  •  ')}
             </p>
-          </div>,
-          'lang-0');
+          </div>
+        ), 'lang-0');
       }
-
       else if (sk === 'awards' && awards.length) {
         awards.forEach((a, i) => {
-          const node = (
+          add(sk, i === 0, (
             <div>
               {i === 0 && <h2 className={headingClass}>{labelFor(sk)}</h2>}
               <div className="flex justify-between items-start">
@@ -216,8 +205,7 @@ export function ResumePreview({ resume, template = 'modern', currentPage = 1, on
                 </span>
               </div>
             </div>
-          );
-          add(sk, i === 0, node, `award-${a.id}`);
+          ), `award-${a.id}`);
         });
       }
     }
@@ -225,35 +213,35 @@ export function ResumePreview({ resume, template = 'modern', currentPage = 1, on
   };
 
   // ── Pagination ────────────────────────────────────────────────────────────
-  // We use a VISIBLE measurement container — positioned off-screen but still
-  // in the document flow so offsetHeight works correctly.
   const measureRef  = useRef(null);
   const [pageBreaks, setPageBreaks] = useState([]);
-  // Store headingClass used at measure time so PageContent uses the same
-  const [measuredHeadingClass, setMeasuredHeadingClass] = useState('');
 
   const computeBreaks = (headingClass) => {
-    setMeasuredHeadingClass(headingClass);
     setTimeout(() => {
       if (!measureRef.current) return;
       const nodes = Array.from(measureRef.current.querySelectorAll('[data-entry]'));
       if (!nodes.length) return;
 
-      // Content area = A4 height minus top+bottom padding
-      const contentH = A4_H - margins.top - margins.bottom;
-      // Page 1 budget = content area minus header block
-      // Page 2+ budget = full content area
-      let pageLimit = contentH - HEADER_H;
-      let used = 0;
-      const breaks = [];
+      // ── Budget: how many px of entries fit per page ───────────────────────
+      //
+      //  Total inner height = A4_H − top margin − bottom margin
+      //  We then subtract FOOTER_H so entries can never visually reach
+      //  the footer strip (which lives inside the bottom margin).
+      //
+      //   Page 1  → also subtract HEADER_H (name/contact block)
+      //   Page 2+ → full inner height minus footer only
+      //
+      const innerH   = A4_H - margins.top - margins.bottom;
+      const contentH = innerH - FOOTER_H;          // ← footer guard on every page
+      let pageLimit  = contentH - HEADER_H;         // page 1
+      let used       = 0;
+      const breaks   = [];
 
       nodes.forEach((el, i) => {
-        // offsetHeight works correctly here because the element is in the DOM
-        // at the right width (794px container)
         const h = el.offsetHeight + ENTRY_GAP;
         if (i > 0 && used + h > pageLimit) {
           breaks.push(i);
-          pageLimit = contentH; // full page for pages 2+
+          pageLimit = contentH;   // page 2+
           used = h;
         } else {
           used += h;
@@ -265,20 +253,18 @@ export function ResumePreview({ resume, template = 'modern', currentPage = 1, on
     }, 100);
   };
 
-  // Heading class is passed in at render time — we need a ref to store it
   const headingClassRef = useRef('');
 
   useEffect(() => {
     computeBreaks(headingClassRef.current);
   }, [resume, template, theme.density]);
 
+  const totalPages = pageBreaks.length + 1;
   const entryStart = currentPage === 1 ? 0 : (pageBreaks[currentPage - 2] ?? 0);
   const entryEnd   = pageBreaks[currentPage - 1] ?? Infinity;
 
-  // ── Measure pane renderer (all entries, off-screen) ───────────────────────
-  // Uses a portal-like absolutely positioned element at correct A4 content width
+  // ── Measure pane ─────────────────────────────────────────────────────────
   const MeasurePane = ({ headingClass }) => {
-    // Store heading class so useEffect can reference it
     headingClassRef.current = headingClass;
     const all = buildEntries(headingClass);
     return (
@@ -286,20 +272,10 @@ export function ResumePreview({ resume, template = 'modern', currentPage = 1, on
         ref={measureRef}
         aria-hidden="true"
         style={{
-          // position:fixed takes this out of all parent stacking/clipping contexts
-          // so overflow:hidden on the page wrapper doesn't affect it.
-          // The element is still in the DOM and laid out at the specified width,
-          // so offsetHeight returns the correct rendered height.
-          position: 'fixed',
-          left: '-9999px',
-          top: '0px',
+          position: 'fixed', left: '-9999px', top: '0px',
           width: `${A4_W - margins.left - margins.right}px`,
-          pointerEvents: 'none',
-          visibility: 'hidden',
-          fontFamily: font,
-          fontSize: '12px',
-          boxSizing: 'border-box',
-          zIndex: -9999,
+          pointerEvents: 'none', visibility: 'hidden',
+          fontFamily: font, fontSize: '12px', boxSizing: 'border-box', zIndex: -9999,
         }}
       >
         {all.map((e, i) => (
@@ -311,22 +287,17 @@ export function ResumePreview({ resume, template = 'modern', currentPage = 1, on
     );
   };
 
-  // ── Page content renderer ─────────────────────────────────────────────────
+  // ── Page content ─────────────────────────────────────────────────────────
   const PageContent = ({ headingClass, sections }) => {
-    const all = buildEntries(headingClass);
-
-    // For two-column: filter by allowed sections; otherwise use all
+    const all  = buildEntries(headingClass);
     const pool = sections ? all.filter(e => sections.includes(e.sectionKey)) : all;
 
-    // Map to global index and filter to current page window
     const visible = pool
       .map(e => ({ ...e, globalIdx: all.findIndex(a => a.id === e.id) }))
       .filter(e => e.globalIdx >= entryStart && e.globalIdx < entryEnd);
 
     if (!visible.length) return null;
 
-    // Group consecutive same-section items so we can show section headings once
-    // When a section continues from prior page, show "(cont.)" in the heading
     const groups = [];
     let cur = null;
     visible.forEach(e => {
@@ -341,7 +312,6 @@ export function ResumePreview({ resume, template = 'modern', currentPage = 1, on
       <div style={{ fontFamily: font, fontSize: '12px' }}>
         {groups.map(g => (
           <div key={`${g.sectionKey}-${g.items[0].id}`} style={{ marginBottom: SECTION_GAP }}>
-            {/* If section is split across pages, show a continuation heading */}
             {!g.startsFromBeginning && (
               <h2 className={headingClass}>
                 {labelFor(g.sectionKey)}
@@ -359,26 +329,73 @@ export function ResumePreview({ resume, template = 'modern', currentPage = 1, on
     );
   };
 
-  // ── Page wrapper style ────────────────────────────────────────────────────
-  // Strict A4 height + overflow:hidden = content can NEVER bleed past the paper edge.
-  // MeasurePane is rendered as a sibling fragment OUTSIDE this div so it is
-  // not clipped and its offsetHeight reads correctly.
+  // ── Page-number footer ────────────────────────────────────────────────────
+  //
+  // Absolutely positioned inside the bottom margin. Because FOOTER_H is
+  // already subtracted from the paginator budget, entries can never reach
+  // this zone — no overlap is possible.
+  //
+  // Shown only when the resume spans more than one page.
+  // Left:  applicant full name
+  // Right: "Page X of Y"
+  //
+  const PageFooter = ({ colorOverride } = {}) => {
+    if (totalPages <= 1) return null;
+    const name   = personalInfo?.fullName || '';
+    // Centre the strip vertically in the bottom margin
+    const bottom = Math.max(0, Math.round((margins.bottom - FOOTER_H) / 2));
+    const color  = colorOverride || '#94a3b8';
+
+    return (
+      <div
+        aria-hidden="true"
+        style={{
+          position:       'absolute',
+          bottom,
+          left:           margins.left,
+          right:          margins.right,
+          height:         FOOTER_H,
+          display:        'flex',
+          alignItems:     'center',
+          justifyContent: 'space-between',
+          borderTop:      `0.5px solid ${colorOverride ? 'rgba(255,255,255,0.35)' : '#e2e8f0'}`,
+          paddingTop:     5,
+          fontFamily:     font,
+          fontSize:       9,
+          color,
+          letterSpacing:  '0.04em',
+          userSelect:     'none',
+          pointerEvents:  'none',
+        }}
+      >
+        <span style={{ fontWeight: 500 }}>{name}</span>
+        <span>Page {currentPage} of {totalPages}</span>
+      </div>
+    );
+  };
+
+  // ── Page wrapper ──────────────────────────────────────────────────────────
+  // position:relative  → anchors the absolute footer
+  // overflow:hidden    → clips content at the exact A4 boundary
+  // NO flex needed     → paginator budget already guarantees content stops
+  //                      before the footer zone
   const pageStyle = (extra = {}) => ({
-    fontFamily: font,
-    fontSize: '12px',
-    paddingTop:    margins.top,
-    paddingRight:  margins.right,
-    paddingBottom: margins.bottom,
-    paddingLeft:   margins.left,
-    width: '100%',
-    boxSizing: 'border-box',
-    height: `${A4_H}px`,          // strict A4 — never grows
-    overflow: 'hidden',            // clips anything beyond the page boundary
+    fontFamily:      font,
+    fontSize:        '12px',
+    position:        'relative',
+    paddingTop:      margins.top,
+    paddingRight:    margins.right,
+    paddingBottom:   margins.bottom,
+    paddingLeft:     margins.left,
+    width:           '100%',
+    boxSizing:       'border-box',
+    height:          `${A4_H}px`,
+    overflow:        'hidden',
     backgroundColor: 'white',
     ...extra,
   });
 
-  // ── Contact header sub-components ─────────────────────────────────────────
+  // ── Contact headers ───────────────────────────────────────────────────────
   const ModernHeader = () => (
     <div className="border-b-2 pb-3 mb-4" style={{ borderColor: theme.accentColor }}>
       <h1 className="text-3xl font-bold text-slate-900 mb-1">{personalInfo.fullName || 'Your Name'}</h1>
@@ -426,6 +443,7 @@ export function ResumePreview({ resume, template = 'modern', currentPage = 1, on
         <div style={pageStyle()}>
           {currentPage === 1 && <ModernHeader />}
           <PageContent headingClass={h} />
+          <PageFooter />
         </div>
       </>
     );
@@ -449,6 +467,7 @@ export function ResumePreview({ resume, template = 'modern', currentPage = 1, on
             </div>
           )}
           <PageContent headingClass={h} />
+          <PageFooter />
         </div>
       </>
     );
@@ -472,6 +491,7 @@ export function ResumePreview({ resume, template = 'modern', currentPage = 1, on
             </div>
           )}
           <PageContent headingClass={h} />
+          <PageFooter />
         </div>
       </>
     );
@@ -495,6 +515,7 @@ export function ResumePreview({ resume, template = 'modern', currentPage = 1, on
             </div>
           )}
           <PageContent headingClass={h} />
+          <PageFooter />
         </div>
       </>
     );
@@ -505,9 +526,9 @@ export function ResumePreview({ resume, template = 'modern', currentPage = 1, on
     return (
       <>
         <MeasurePane headingClass={h} />
-        <div style={{ ...pageStyle({ backgroundColor: theme.accentColor }), display:'flex', flexDirection:'column' }}>
+        <div style={pageStyle({ backgroundColor: theme.accentColor, display: 'flex', flexDirection: 'column' })}>
           {currentPage === 1 && (
-            <div className="bg-white rounded-lg p-6 mb-4 shadow-lg">
+            <div className="bg-white rounded-lg p-6 mb-4 shadow-lg" style={{ flexShrink: 0 }}>
               <h1 className="text-3xl font-bold text-slate-900 mb-2">{personalInfo.fullName || 'Your Name'}</h1>
               <div className="flex flex-wrap gap-3 text-sm text-slate-600">
                 {personalInfo.email && <span>{personalInfo.email}</span>}
@@ -517,9 +538,10 @@ export function ResumePreview({ resume, template = 'modern', currentPage = 1, on
               </div>
             </div>
           )}
-          <div className="bg-white rounded-lg shadow-lg p-6 flex-1 overflow-hidden">
+          <div className="bg-white rounded-lg shadow-lg p-6" style={{ flex: 1, overflow: 'hidden' }}>
             <PageContent headingClass={h} />
           </div>
+          <PageFooter colorOverride="rgba(255,255,255,0.8)" />
         </div>
       </>
     );
@@ -534,30 +556,31 @@ export function ResumePreview({ resume, template = 'modern', currentPage = 1, on
         <MeasurePane headingClass={h} />
         <div style={pageStyle({ fontSize: '11px' })}>
           {currentPage === 1 && (
-          <div className="flex gap-4 mb-4" style={{ borderBottom:`2px solid ${theme.accentColor}`, paddingBottom:'1rem' }}>
-            <div className="w-2/3">
-              <h1 className="text-2xl font-bold text-slate-900 mb-2">{personalInfo.fullName || 'Your Name'}</h1>
-              <div className="flex flex-wrap gap-2 text-xs text-slate-600">
-                {personalInfo.email && <span>{personalInfo.email}</span>}
-                {personalInfo.phone && <span>• {personalInfo.phone}</span>}
-                {personalInfo.address && <span>• {personalInfo.address}</span>}
+            <div className="flex gap-4 mb-4" style={{ borderBottom:`2px solid ${theme.accentColor}`, paddingBottom:'1rem' }}>
+              <div className="w-2/3">
+                <h1 className="text-2xl font-bold text-slate-900 mb-2">{personalInfo.fullName || 'Your Name'}</h1>
+                <div className="flex flex-wrap gap-2 text-xs text-slate-600">
+                  {personalInfo.email && <span>{personalInfo.email}</span>}
+                  {personalInfo.phone && <span>• {personalInfo.phone}</span>}
+                  {personalInfo.address && <span>• {personalInfo.address}</span>}
+                </div>
+              </div>
+              <div className="w-1/3">
+                {links.map(l => <div key={l.id} className="text-xs text-slate-600 mb-1">{l.label}: {l.url||l.label}</div>)}
               </div>
             </div>
-            <div className="w-1/3">
-              {links.map(l => <div key={l.id} className="text-xs text-slate-600 mb-1">{l.label}: {l.url||l.label}</div>)}
-            </div>
+          )}
+          <div className="flex gap-4">
+            <div className="w-2/3"><PageContent headingClass={h} sections={leftSections} /></div>
+            <div className="w-1/3"><PageContent headingClass={h} sections={rightSections} /></div>
           </div>
-        )}
-        <div className="flex gap-4">
-          <div className="w-2/3"><PageContent headingClass={h} sections={leftSections} /></div>
-          <div className="w-1/3"><PageContent headingClass={h} sections={rightSections} /></div>
-        </div>
+          <PageFooter />
         </div>
       </>
     );
   }
 
-  // default = modern
+  // fallback → modern
   const h = 'text-sm font-bold mb-2 uppercase tracking-widest';
   return (
     <>
@@ -565,6 +588,7 @@ export function ResumePreview({ resume, template = 'modern', currentPage = 1, on
       <div style={pageStyle()}>
         {currentPage === 1 && <ModernHeader />}
         <PageContent headingClass={h} />
+        <PageFooter />
       </div>
     </>
   );
