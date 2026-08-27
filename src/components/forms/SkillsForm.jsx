@@ -1,7 +1,11 @@
 import { useState } from 'react';
 import { suggestSkills } from '../../services/geminiService';
 import { useToast } from '../toastContext';
+import { AutocompleteInput } from '../shared/AutocompleteInput';
 
+// Starting points only — the category is free text. A developer wants
+// "Front-End" / "Back-End & AI" / "Databases & Tools", which says far more than
+// "Technical" / "Tools", and those groupings differ by profession.
 const SKILL_CATEGORIES = ['Technical', 'Tools', 'Soft Skills', 'Languages', 'Other'];
 const SKILL_LEVELS = ['Beginner', 'Intermediate', 'Advanced', 'Expert'];
 
@@ -15,12 +19,27 @@ export function SkillsForm({ skills, professionalInfo, addSkill, updateSkill, re
   const [skillCategory, setSkillCategory] = useState('Technical');
   const [skillLevel, setSkillLevel] = useState('');
 
+  // Groups already used in this resume rank first, so adding a second
+  // "Front-End" skill doesn't require retyping or risk a near-miss like
+  // "Frontend" splitting the group in two.
+  const usedCategories = [...new Set(
+    (skills || []).map(s => (s.category || '').trim()).filter(Boolean)
+  )];
+  const categorySuggestions = [
+    ...usedCategories,
+    ...SKILL_CATEGORIES.filter(c => !usedCategories.includes(c)),
+  ];
+
   const handleAddSkill = () => {
     if (!skillInput.trim()) {
       toast('Please enter a skill name', 'error');
       return;
     }
-    addSkill({ name: skillInput.trim(), category: skillCategory, level: skillLevel });
+    addSkill({
+      name: skillInput.trim(),
+      category: skillCategory.trim() || 'Other',
+      level: skillLevel,
+    });
     setSkillInput('');
     setSkillLevel('');
     toast('Skill added successfully', 'success');
@@ -94,15 +113,14 @@ export function SkillsForm({ skills, professionalInfo, addSkill, updateSkill, re
             onKeyPress={(e) => e.key === 'Enter' && handleAddSkill()}
             className={inputClass}
           />
-          <select
+          <AutocompleteInput
             value={skillCategory}
-            onChange={(e) => setSkillCategory(e.target.value)}
+            onChange={setSkillCategory}
+            suggestions={categorySuggestions}
+            placeholder="Group, e.g. Front-End"
             className={inputClass}
-          >
-            {SKILL_CATEGORIES.map(cat => (
-              <option key={cat} value={cat}>{cat}</option>
-            ))}
-          </select>
+            onKeyDown={(e) => { if (e.key === 'Enter') handleAddSkill(); }}
+          />
           <select
             value={skillLevel}
             onChange={(e) => setSkillLevel(e.target.value)}

@@ -3,45 +3,20 @@
 import { useState } from 'react'
 import { useRouting } from '../hooks/useRouting'
 import { useResume } from '../hooks/useResume'
-import { Button } from '../components/shared/Button'
 import { ResumeCard } from '../components/dashboard/ResumeCard'
 
 // ─── Stat Card ────────────────────────────────────────────────────
-function StatCard({ icon, label, value, color, bg }) {
-  return (
-    <div className={`relative overflow-hidden rounded-2xl border border-white/60 bg-white p-5 shadow-sm hover:shadow-md transition-all duration-200 group`}>
-      <div className={`absolute -top-4 -right-4 w-20 h-20 ${bg} rounded-full opacity-30 group-hover:opacity-50 transition-opacity duration-300`}></div>
-      <div className={`w-10 h-10 ${bg} ${color} rounded-xl flex items-center justify-center text-lg mb-3 relative z-10`}>
-        {icon}
-      </div>
-      <p className="text-2xl font-extrabold text-slate-900 relative z-10" style={{ fontFamily: "'Sora', sans-serif" }}>{value}</p>
-      <p className="text-xs font-medium text-slate-500 mt-0.5 relative z-10">{label}</p>
-    </div>
-  )
-}
-
 // ─── Quick Action Card ────────────────────────────────────────────
-function QuickActionCard({ icon, title, desc, onClick, accent, bg }) {
-  return (
-    <button
-      onClick={onClick}
-      className="group relative bg-white rounded-2xl border border-slate-100 p-5 text-left hover:shadow-lg hover:-translate-y-1 transition-all duration-300 overflow-hidden w-full"
-    >
-      <div className={`absolute inset-0 ${bg} opacity-0 group-hover:opacity-100 transition-opacity duration-300`}></div>
-      <div className="relative z-10 flex items-start gap-4">
-        <div className={`flex-shrink-0 w-12 h-12 ${accent} rounded-xl flex items-center justify-center text-xl shadow-sm group-hover:scale-110 transition-transform duration-200`}>
-          {icon}
-        </div>
-        <div>
-          <h3 className="font-bold text-slate-900 text-sm mb-1 group-hover:text-slate-800">{title}</h3>
-          <p className="text-xs text-slate-500 leading-relaxed">{desc}</p>
-        </div>
-      </div>
-    </button>
-  )
-}
-
 // ─── Empty State ──────────────────────────────────────────────────
+// Clock captured once at load. Reading Date.now() during render is impure, and
+// these labels only need day granularity, so a per-load value is accurate enough.
+const PAGE_LOADED_AT = Date.now();
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
+// Was duplicated verbatim in the filter and in the recent count.
+const isRecent = (updatedAt) =>
+  new Date(updatedAt).getTime() > PAGE_LOADED_AT - WEEK_MS;
+
 function EmptyState({ onCreateResume }) {
   return (
     <div className="flex flex-col items-center justify-center py-24 text-center">
@@ -92,10 +67,7 @@ export function DashboardPage() {
     .filter(resume => {
       const matchesSearch = resume.meta.title?.toLowerCase().includes(searchQuery.toLowerCase())
       if (!matchesSearch) return false
-      if (filter === 'recent') {
-        const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
-        return new Date(resume.meta.updatedAt) > weekAgo
-      }
+      if (filter === 'recent') return isRecent(resume.meta.updatedAt)
       return true
     })
     .sort((a, b) => {
@@ -115,10 +87,21 @@ export function DashboardPage() {
     }
   }
 
-  const recentCount = resumes.filter(r => {
-    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
-    return new Date(r.meta.updatedAt) > weekAgo
-  }).length
+  // Most recently edited resume — drives the hero subtitle and the tip CTA.
+  // True first run: the single resume is the untouched default the hook seeds,
+  // not something the user actually made.
+  const isFirstRun =
+    resumes.length === 1 &&
+    resumes[0].meta.id === 'default' &&
+    !resumes[0].personalInfo?.fullName?.trim() &&
+    !resumes[0].summary?.trim() &&
+    (resumes[0].experience?.length ?? 0) === 0;
+
+  const lastEdited = [...resumes].sort(
+    (a, b) => new Date(b.meta.updatedAt || 0) - new Date(a.meta.updatedAt || 0)
+  )[0];
+
+  const recentCount = resumes.filter(r => isRecent(r.meta.updatedAt)).length
 
   return (
     <div
@@ -206,12 +189,14 @@ export function DashboardPage() {
                   My Resumes
                 </h1>
                 <p className="text-indigo-200 text-sm mt-1">
-                  {resumes.length} resume{resumes.length !== 1 ? 's' : ''} · {recentCount} updated this week
+                  {isFirstRun
+                    ? 'Create your first resume to get started'
+                    : <>Last edited &ldquo;{lastEdited.meta.title}&rdquo;</>}
                 </p>
               </div>
 
-              {/* Stat pills */}
-              <div className="flex items-center gap-2 flex-wrap">
+              {/* Stat pills — meaningless before the first real resume exists */}
+              <div className={`flex items-center gap-2 flex-wrap ${isFirstRun ? 'hidden' : ''}`}>
                 <div className="flex items-center gap-2 bg-white/15 backdrop-blur-sm border border-white/20 rounded-xl px-4 py-2.5">
                   <span className="text-white text-lg font-bold">{resumes.length}</span>
                   <span className="text-indigo-100 text-xs font-medium">Total</span>
@@ -219,10 +204,6 @@ export function DashboardPage() {
                 <div className="flex items-center gap-2 bg-white/15 backdrop-blur-sm border border-white/20 rounded-xl px-4 py-2.5">
                   <span className="text-white text-lg font-bold">{recentCount}</span>
                   <span className="text-indigo-100 text-xs font-medium">This week</span>
-                </div>
-                <div className="flex items-center gap-2 bg-emerald-500/30 backdrop-blur-sm border border-emerald-300/30 rounded-xl px-4 py-2.5">
-                  <span className="text-white text-sm">✦</span>
-                  <span className="text-white text-xs font-semibold">AI Ready</span>
                 </div>
               </div>
             </div>
@@ -232,105 +213,86 @@ export function DashboardPage() {
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
 
-        {/* ── QUICK ACTIONS ── */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-8">
-          <QuickActionCard
-            icon="✏️"
-            title="Create from Scratch"
-            desc="Start fresh with AI assistance and professional templates"
-            onClick={goToCreateFromScratch}
-            accent="bg-indigo-50 text-indigo-600"
-            bg="bg-gradient-to-br from-indigo-50/80 to-transparent"
-          />
-          <QuickActionCard
-            icon="📤"
-            title="Import from PDF"
-            desc="Upload your existing resume and let AI extract every detail"
-            onClick={goToCreateFromPDF}
-            accent="bg-emerald-50 text-emerald-600"
-            bg="bg-gradient-to-br from-emerald-50/80 to-transparent"
-          />
-          <QuickActionCard
-            icon="⚡"
-            title="Quick Stats"
-            desc={`${resumes.length} total resume${resumes.length !== 1 ? 's' : ''} · ${recentCount} recent · AI-powered`}
-            onClick={() => {}}
-            accent="bg-violet-50 text-violet-600"
-            bg="bg-gradient-to-br from-violet-50/60 to-transparent"
-          />
-        </div>
 
-        {/* ── FILTER / SEARCH BAR ── */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mb-6">
-          {/* Search */}
-          <div className="relative flex-1 max-w-xs search-glow rounded-xl transition-all">
-            <svg className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-            <input
-              type="text"
-              placeholder="Search resumes…"
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-300 focus:bg-white transition-all"
-            />
-          </div>
-
-          {/* Filter Pills */}
-          <div className="flex items-center gap-1.5 bg-slate-100 rounded-xl p-1">
-            {[{ value: 'all', label: 'All' }, { value: 'recent', label: 'Recent' }].map(f => (
-              <button
-                key={f.value}
-                onClick={() => setFilter(f.value)}
-                className={`filter-pill px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                  filter === f.value
-                    ? 'active'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-white'
-                }`}
+        {/* Searching and sorting are noise when there is nothing to search yet. */}
+        {!isFirstRun && (
+          <>
+          {/* ── FILTER / SEARCH BAR ── */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mb-6">
+            {/* Search */}
+            <div className="relative flex-1 max-w-xs search-glow rounded-xl transition-all">
+              <svg className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              <input
+                type="text"
+                placeholder="Search resumes…"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                className="w-full pl-10 pr-4 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-300 focus:bg-white transition-all"
+              />
+            </div>
+  
+            {/* Filter Pills */}
+            <div className="flex items-center gap-1.5 bg-slate-100 rounded-xl p-1">
+              {[{ value: 'all', label: 'All' }, { value: 'recent', label: 'Recent' }].map(f => (
+                <button
+                  key={f.value}
+                  onClick={() => setFilter(f.value)}
+                  className={`filter-pill px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                    filter === f.value
+                      ? 'active'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-white'
+                  }`}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+  
+            {/* Sort */}
+            <div className="relative">
+              <select
+                value={sortBy}
+                onChange={e => setSortBy(e.target.value)}
+                className="appearance-none pl-4 pr-9 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-300 text-sm text-slate-700 font-medium cursor-pointer hover:border-slate-300 transition-all"
               >
-                {f.label}
-              </button>
-            ))}
+                <option value="date">Latest first</option>
+                <option value="name">Name A–Z</option>
+                <option value="template">By template</option>
+              </select>
+              <svg className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </div>
+  
+            {/* Result count */}
+            {searchQuery && (
+              <span className="text-xs text-slate-500 font-medium whitespace-nowrap">
+                {filteredResumes.length} result{filteredResumes.length !== 1 ? 's' : ''}
+              </span>
+            )}
           </div>
-
-          {/* Sort */}
-          <div className="relative">
-            <select
-              value={sortBy}
-              onChange={e => setSortBy(e.target.value)}
-              className="appearance-none pl-4 pr-9 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-300 text-sm text-slate-700 font-medium cursor-pointer hover:border-slate-300 transition-all"
-            >
-              <option value="date">Latest first</option>
-              <option value="name">Name A–Z</option>
-              <option value="template">By template</option>
-            </select>
-            <svg className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </svg>
+  
+          {/* ── SECTION HEADING ── */}
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-extrabold text-slate-900" style={{ fontFamily: "'Sora', sans-serif" }}>
+              {filter === 'recent' ? 'Recent Resumes' : 'All Resumes'}
+            </h2>
+            {filteredResumes.length > 0 && (
+              <span className="text-xs font-semibold text-slate-400 bg-slate-100 px-2.5 py-1 rounded-full">
+                {filteredResumes.length}
+              </span>
+            )}
           </div>
-
-          {/* Result count */}
-          {searchQuery && (
-            <span className="text-xs text-slate-500 font-medium whitespace-nowrap">
-              {filteredResumes.length} result{filteredResumes.length !== 1 ? 's' : ''}
-            </span>
-          )}
-        </div>
-
-        {/* ── SECTION HEADING ── */}
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-extrabold text-slate-900" style={{ fontFamily: "'Sora', sans-serif" }}>
-            {filter === 'recent' ? 'Recent Resumes' : 'All Resumes'}
-          </h2>
-          {filteredResumes.length > 0 && (
-            <span className="text-xs font-semibold text-slate-400 bg-slate-100 px-2.5 py-1 rounded-full">
-              {filteredResumes.length}
-            </span>
-          )}
-        </div>
+  
+          </>
+        )}
 
         {/* ── RESUME GRID ── */}
-        {filteredResumes.length > 0 ? (
+        {isFirstRun ? (
+          <EmptyState onCreateResume={() => createResume('My First Resume')} />
+        ) : filteredResumes.length > 0 ? (
           <div className="resume-grid">
             {/* New resume card */}
             <button
@@ -364,11 +326,10 @@ export function DashboardPage() {
                 onDuplicate={duplicateResume}
                 onDelete={deleteResume}
                 canDelete={resumes.length > 1}
+                now={PAGE_LOADED_AT}
               />
             ))}
           </div>
-        ) : resumes.length === 0 ? (
-          <EmptyState onCreateResume={() => createResume('My First Resume')} />
         ) : (
           /* No results for search */
           <div className="flex flex-col items-center justify-center py-20 text-center">
@@ -385,7 +346,7 @@ export function DashboardPage() {
         )}
 
         {/* ── TIPS BANNER ── */}
-        {resumes.length > 0 && (
+        {!isFirstRun && (
           <div className="mt-10 bg-gradient-to-r from-indigo-50 to-violet-50 border border-indigo-100 rounded-2xl p-5 flex flex-col sm:flex-row items-start sm:items-center gap-4">
             <div className="flex-shrink-0 w-10 h-10 bg-indigo-100 rounded-xl flex items-center justify-center text-lg">💡</div>
             <div className="flex-1">
@@ -393,10 +354,10 @@ export function DashboardPage() {
               <p className="text-xs text-slate-500 leading-relaxed">Open any resume, go to "Tailor to Job", and paste a job description. Our AI will optimize your resume to beat ATS filters.</p>
             </div>
             <button
-              onClick={goToCreateFromScratch}
+              onClick={() => lastEdited && handleSelectResume(lastEdited.meta.id)}
               className="flex-shrink-0 text-xs font-semibold text-indigo-600 hover:text-indigo-700 border border-indigo-200 hover:border-indigo-300 bg-white rounded-xl px-4 py-2.5 transition-all whitespace-nowrap"
             >
-              Try it now →
+              Open {lastEdited ? `“${lastEdited.meta.title}”` : 'a resume'} →
             </button>
           </div>
         )}
@@ -415,11 +376,9 @@ export function DashboardPage() {
             <span className="font-semibold text-slate-500">ResumeAI</span>
             <span>© 2026</span>
           </div>
-          <div className="flex gap-5">
-            {['Privacy', 'Terms', 'Help'].map(l => (
-              <a key={l} href="#" className="hover:text-slate-600 transition-colors">{l}</a>
-            ))}
-          </div>
+          {/* Was Privacy / Terms / Help as href="#" — three links to pages that
+              don't exist. Replaced with something true and actually useful. */}
+          <p>Resumes are saved in this browser only.</p>
         </div>
       </footer>
     </div>

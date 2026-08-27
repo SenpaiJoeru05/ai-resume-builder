@@ -13,6 +13,9 @@ const initialResume = {
       accentColor: '#2563eb',  // blue-600
       font: 'sans',            // sans | serif | modern
       density: 'comfortable',  // comfortable | compact
+      pageSize: 'a4',          // a4 | letter | folio | legal — see utils/pageSizes.js
+      skillStyle: 'inline',    // inline (dense, ATS-friendly) | pills
+      showPhoto: true,         // render personalInfo.photo in photo-friendly templates
     },
   },
   personalInfo: {
@@ -20,6 +23,7 @@ const initialResume = {
     email: '',
     phone: '',
     address: '',
+    photo: '',             // optional profile photo as a (resized) data URL
     links: [],             // [{ id, label, url }] e.g. LinkedIn, Portfolio, GitHub
   },
   // Job Target drives all AI output (role-aware summaries, skill suggestions, etc.)
@@ -132,11 +136,18 @@ export function useResume() {
   // Helper to update the active resume
   const updateActiveResume = (updater) => {
     setResumes((prev) =>
-      prev.map((r) =>
-        r.meta.id === (activeResumeId || resume.meta.id)
-          ? { ...updater(r), meta: { ...r.meta, updatedAt: new Date().toISOString() } }
-          : r
-      )
+      prev.map((r) => {
+        if (r.meta.id !== (activeResumeId || resume.meta.id)) return r;
+        // Apply the updater first, THEN stamp updatedAt — so changes the
+        // updater makes to `meta` (template, theme, customization) are kept.
+        // (Previously `meta` was overwritten with the original `r.meta`,
+        // which silently discarded template/theme switches.)
+        const updated = updater(r);
+        return {
+          ...updated,
+          meta: { ...updated.meta, updatedAt: new Date().toISOString() },
+        };
+      })
     );
   };
 
@@ -160,7 +171,18 @@ export function useResume() {
     return newResume;
   };
 
+  // Builds a complete resume in ONE state update. Callers with a full payload
+  // (e.g. PDF import) must use this rather than createResume() followed by the
+  // individual mutators: those all route through updateActiveResume, which
+  // matches on the `activeResumeId` captured in the *current* render. Right
+  // after createResume() that value is still the PREVIOUS resume, so the
+  // follow-up writes land on the wrong record — leaving the new resume empty
+  // and overwriting the old one.
   const createResumeWithData = (title = 'New Resume', data = {}) => {
+    // Each section falls back to a fresh array rather than spreading
+    // initialResume's, so resumes never share a mutable reference.
+    const section = (key) => (Array.isArray(data[key]) ? data[key] : []);
+
     const newResume = {
       ...initialResume,
       personalInfo: {
@@ -171,6 +193,15 @@ export function useResume() {
         ...initialResume.professionalInfo,
         ...(data.professionalInfo || {}),
       },
+      summary: data.summary || '',
+      experience: section('experience'),
+      education: section('education'),
+      skills: section('skills'),
+      projects: section('projects'),
+      certifications: section('certifications'),
+      languages: section('languages'),
+      awards: section('awards'),
+      sectionConfig: initialResume.sectionConfig.map((s) => ({ ...s })),
       meta: {
         ...initialResume.meta,
         id: generateId(),

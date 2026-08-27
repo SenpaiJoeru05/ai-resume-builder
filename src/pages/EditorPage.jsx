@@ -6,9 +6,11 @@ import { useResume } from '../hooks/useResume'
 import { useRouting } from '../hooks/useRouting'
 import { EditorSidebar } from '../components/editor/EditorSidebar'
 import { EditorPreview } from '../components/editor/EditorPreview'
+import { ArrangePanel } from '../components/editor/ArrangePanel'
 import { ResumeForm } from '../components/ResumeForm'
 import { PDFPreviewModal } from '../components/PDFPreviewModal'
 import { TemplateGallery } from '../components/TemplateGallery'
+import { generateResumePDF, saveBlobAsFile } from '../services/pdfDownloadService'
 
 // ─── Save Status Badge ────────────────────────────────────────────
 function SaveBadge({ status }) {
@@ -96,6 +98,7 @@ export function EditorPage() {
   const [activeSection, setActiveSection] = useState('summary')
   const [showPreviewModal, setShowPreviewModal] = useState(false)
   const [showTemplateGallery, setShowTemplateGallery] = useState(false)
+  const [showArrange, setShowArrange] = useState(false)
   const [mobileView, setMobileView] = useState('edit')
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [isEditingTitle, setIsEditingTitle] = useState(false)
@@ -169,25 +172,14 @@ export function EditorPage() {
 
   const handleConfirmDownload = async () => {
     try {
-      const response = await fetch('http://localhost:3001/api/pdf/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ resume: currentResume, template: selectedTemplate })
-      })
-      if (!response.ok) throw new Error('Failed to generate PDF')
-      const blob = await response.blob()
-      const url = window.URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `${titleValue || 'resume'}.pdf`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      window.URL.revokeObjectURL(url)
+      const blob = await generateResumePDF({ resume: currentResume, template: selectedTemplate })
+      saveBlobAsFile(blob, `${titleValue || 'resume'}.pdf`)
       setShowPreviewModal(false)
     } catch (error) {
       console.error('Download error:', error)
-      throw new Error('Failed to generate PDF. Please make sure the server is running on port 3001.')
+      // Re-throw the service's message — it names the actual cause (server down,
+      // wrong port, render error) instead of a generic failure.
+      throw error
     }
   }
 
@@ -620,7 +612,7 @@ export function EditorPage() {
 
         {/* ── COL 3: LIVE PREVIEW PANEL ── */}
         <div
-          className="preview-panel flex-1 flex flex-col overflow-hidden bg-white"
+          className="preview-panel flex-1 flex flex-col overflow-hidden bg-white relative"
           style={{
             backgroundImage: 'radial-gradient(#E2E8F0 1px, transparent 0)',
             backgroundSize: '20px 20px',
@@ -674,6 +666,20 @@ export function EditorPage() {
                 Real-time
               </div>
               <button
+                onClick={() => setShowArrange(v => !v)}
+                className={`flex items-center gap-1.5 text-[11px] font-semibold rounded-lg px-2.5 py-1 border transition-colors ${
+                  showArrange
+                    ? 'text-white bg-indigo-600 border-indigo-600'
+                    : 'text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border-indigo-100'
+                }`}
+                title="Drag to reorder sections & tune your photo"
+              >
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16M8 4v16M16 4v16" />
+                </svg>
+                Arrange
+              </button>
+              <button
                 onClick={() => setShowTemplateGallery(true)}
                 className="flex items-center gap-1.5 text-[11px] font-semibold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border border-indigo-100 rounded-lg px-2.5 py-1 transition-colors"
               >
@@ -698,6 +704,18 @@ export function EditorPage() {
               onPageCountChange={setTotalPages}
             />
           </div>
+
+          {/* Interactive Arrange overlay — drag to reorder sections + tune photo */}
+          {showArrange && (
+            <ArrangePanel
+              resume={currentResume}
+              reorderSections={reorderSections}
+              toggleSectionVisibility={toggleSectionVisibility}
+              renameSection={renameSection}
+              updateTheme={updateTheme}
+              onClose={() => setShowArrange(false)}
+            />
+          )}
         </div>
       </div>
 

@@ -1,3 +1,8 @@
+import { AutocompleteInput } from '../shared/AutocompleteInput'
+import { JOB_TITLES, INDUSTRIES } from '../../data/suggestions'
+
+const fieldClass = 'w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500'
+
 export function JobTargetSetup({ data, onChange }) {
   return (
     <div className="space-y-6 max-w-2xl mx-auto">
@@ -11,12 +16,12 @@ export function JobTargetSetup({ data, onChange }) {
           <label className="block text-sm font-medium text-slate-700 mb-2">
             Target Job Title <span className="text-red-500">*</span>
           </label>
-          <input
-            type="text"
+          <AutocompleteInput
             value={data.jobTitle || ''}
-            onChange={(e) => onChange({ ...data, jobTitle: e.target.value })}
+            onChange={(v) => onChange({ ...data, jobTitle: v })}
+            suggestions={JOB_TITLES}
             placeholder="e.g., Senior Software Engineer"
-            className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className={fieldClass}
           />
         </div>
 
@@ -24,12 +29,12 @@ export function JobTargetSetup({ data, onChange }) {
           <label className="block text-sm font-medium text-slate-700 mb-2">
             Industry <span className="text-red-500">*</span>
           </label>
-          <input
-            type="text"
+          <AutocompleteInput
             value={data.industry || ''}
-            onChange={(e) => onChange({ ...data, industry: e.target.value })}
+            onChange={(v) => onChange({ ...data, industry: v })}
+            suggestions={INDUSTRIES}
             placeholder="e.g., Technology, Healthcare, Finance"
-            className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className={fieldClass}
           />
         </div>
 
@@ -76,11 +81,15 @@ export function JobTargetSetup({ data, onChange }) {
           <textarea
             value={data.jobDescription || ''}
             onChange={(e) => onChange({ ...data, jobDescription: e.target.value })}
-            placeholder="Paste the job description here for AI to optimize your resume..."
-            rows={4}
+            placeholder={'Paste the full job post you\'re applying to — copy it straight from LinkedIn, Indeed, JobStreet, or the company\'s careers page.\n\nInclude the responsibilities and requirements sections; those are what get matched against your resume.'}
+            rows={5}
             className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
           />
-          <p className="text-xs text-slate-500 mt-1">This helps AI tailor your resume to match job requirements</p>
+          <p className="text-xs text-slate-500 mt-1">
+            The only field we can&rsquo;t fill from your resume — it describes the job you want,
+            not the one you have. Paste it and we&rsquo;ll match your wording to theirs and score
+            how well you fit.
+          </p>
         </div>
 
         <div>

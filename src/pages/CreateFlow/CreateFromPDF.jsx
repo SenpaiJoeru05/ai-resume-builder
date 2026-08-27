@@ -1,20 +1,30 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouting } from '../../hooks/useRouting'
 import { useResume } from '../../hooks/useResume'
-import { Button } from '../../components/shared/Button'
 import { PDFUpload } from '../../components/creation/PDFUpload'
 import { JobTargetSetup } from '../../components/creation/JobTargetSetup'
 import { TemplateSelection } from '../../components/creation/TemplateSelection'
 import { ProgressIndicator } from '../../components/creation/ProgressIndicator'
+import { extractTextFromPDF } from '../../services/pdfExtractService'
+import { parseResumeFromPDF } from '../../services/pdfParseService'
 
 const STEPS = ['Upload', 'Review', 'Job Target', 'Template']
 
 export function CreateFromPDF() {
-  const { goToDashboard, goToEditor } = useRouting()
-  const { createResume } = useResume()
+  const { goToDashboard, goToEditor, goToCreateFromScratch } = useRouting()
+  const { createResumeWithData, resumes, flushStorage } = useResume()
   const [currentStep, setCurrentStep] = useState(1)
   const [scrolled, setScrolled] = useState(false)
   const [processing, setProcessing] = useState(false)
+  const [processingStage, setProcessingStage] = useState('')
+  const [fileName, setFileName] = useState('')
+  const [pageProgress, setPageProgress] = useState(null)
+  const [pendingNavigation, setPendingNavigation] = useState(null)
+  const [importError, setImportError] = useState(null)
+  const [retryNotice, setRetryNotice] = useState(null)
+  const [retrySecondsLeft, setRetrySecondsLeft] = useState(0)
+  // Held so "Try again" doesn't make the user re-pick the same file.
+  const lastFileRef = useRef(null)
   const [formData, setFormData] = useState({
     extractedData: null,
     jobTarget: {
@@ -28,6 +38,32 @@ export function CreateFromPDF() {
     template: 'modern',
   })
 
+  // Ticks the rate-limit countdown. setState inside the interval callback is
+  // fine; only a synchronous call in the effect body would cascade renders.
+  useEffect(() => {
+    if (!retryNotice) return
+    const until = retryNotice.startedAt + retryNotice.waitMs
+    const id = setInterval(() => {
+      setRetrySecondsLeft(Math.max(0, Math.ceil((until - Date.now()) / 1000)))
+    }, 250)
+    return () => clearInterval(id)
+  }, [retryNotice])
+
+  // Hand off to the editor only once the new resume is committed to state AND
+  // written to localStorage, since EditorPage rebuilds its own copy from storage
+  // on mount. Mirrors the create-from-scratch flow.
+  useEffect(() => {
+    if (!pendingNavigation) return
+    if (!resumes.some((r) => r.meta.id === pendingNavigation)) return
+
+    flushStorage()
+    const id = setTimeout(() => {
+      goToEditor(pendingNavigation)
+      setPendingNavigation(null)
+    }, 50)
+    return () => clearTimeout(id)
+  }, [pendingNavigation, resumes, goToEditor, flushStorage])
+
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20)
     window.addEventListener('scroll', onScroll)
@@ -36,47 +72,84 @@ export function CreateFromPDF() {
 
   const handleFileUploaded = async (file) => {
     setProcessing(true)
+    setFileName(file.name)
+    setPageProgress(null)
+    setImportError(null)
+    setRetryNotice(null)
+    lastFileRef.current = file
     try {
-      // Simulate PDF processing
-      await new Promise(resolve => setTimeout(resolve, 2000))
-      
-      // Simulate extracted data
-      const extractedData = {
-        personalInfo: {
-          fullName: 'Imported Name',
-          email: 'imported@example.com',
-          phone: '(555) 123-4567',
-          address: '123 Main St, City, State 12345',
-          links: [],
+      setProcessingStage('read')
+      const extractedText = await extractTextFromPDF(file, (p) => {
+        setProcessingStage('extract')
+        setPageProgress(p)
+      })
+
+      setProcessingStage('parse')
+      const extractedData = await parseResumeFromPDF(extractedText, {
+        // Seeded here (an event callback, not render) so the countdown shows its
+        // real starting value instead of flashing 0 before the first tick.
+        onRetry: ({ waitMs }) => {
+          setRetryNotice({ waitMs, startedAt: Date.now() })
+          setRetrySecondsLeft(Math.ceil(waitMs / 1000))
         },
-        professionalInfo: {
-          jobTitle: 'Software Engineer',
-          industry: 'Technology',
-          yearsExperience: '3+',
-          seniority: 'mid',
-        },
-        summary: 'Experienced software professional with expertise in web development and system architecture.',
-      }
-      
-      setFormData({ 
-        ...formData, 
+      })
+      setRetryNotice(null)
+
+      // The resume already tells us the role this person is positioned for, so
+      // pre-fill Job Target from it rather than making them retype it. The job
+      // description stays empty on purpose — that describes a role they're
+      // applying TO, which can't be known from their own resume.
+      const inferred = extractedData.professionalInfo || {}
+
+      setFormData({
+        ...formData,
         extractedData,
         jobTarget: {
           ...formData.jobTarget,
-          jobTitle: extractedData.professionalInfo.jobTitle || '',
-          industry: extractedData.professionalInfo.industry || '',
-          yearsExperience: extractedData.professionalInfo.yearsExperience || '',
-          seniority: extractedData.professionalInfo.seniority || '',
-        }
+          jobTitle: inferred.jobTitle || '',
+          industry: inferred.industry || '',
+          yearsExperience: inferred.yearsExperience || '',
+          seniority: inferred.seniority || '',
+        },
       })
       setCurrentStep(2)
     } catch (error) {
       console.error('Error importing PDF:', error)
-      alert('Failed to import PDF')
+      // The services already translate provider errors into plain language, so
+      // show that rather than a raw API payload.
+      setImportError(error.message || 'Something went wrong reading this PDF.')
     } finally {
       setProcessing(false)
+      setProcessingStage('')
+      setPageProgress(null)
+      setRetryNotice(null)
     }
   }
+
+  const handleRetry = () => {
+    if (lastFileRef.current) handleFileUploaded(lastFileRef.current)
+  }
+
+  // ── Review-step editing of personalInfo.links ────────────────────────────
+  // The extractor finds LinkedIn/GitHub/portfolio URLs, but a PDF can bury them
+  // in a footer or a text layer that reads out of order, so they need to be
+  // visible and correctable here rather than only after the resume exists.
+  const patchPersonalInfo = (patch) =>
+    setFormData((prev) => ({
+      ...prev,
+      extractedData: {
+        ...prev.extractedData,
+        personalInfo: { ...prev.extractedData.personalInfo, ...patch },
+      },
+    }))
+
+  const extractedLinks = formData.extractedData?.personalInfo?.links || []
+  const setLinks = (next) => patchPersonalInfo({ links: next })
+  const addLink = () =>
+    setLinks([...extractedLinks, { id: `link-${Date.now()}`, label: '', url: '' }])
+  const updateLink = (id, patch) =>
+    setLinks(extractedLinks.map((l) => (l.id === id ? { ...l, ...patch } : l)))
+  const removeLink = (id) => setLinks(extractedLinks.filter((l) => l.id !== id))
 
   const handleNext = () => {
     if (currentStep < STEPS.length) {
@@ -92,12 +165,43 @@ export function CreateFromPDF() {
     }
   }
 
-  const handleCreate = async () => {
+  const handleCreate = () => {
     try {
-      const newResume = createResume('Imported Resume')
-      // Update the resume with the extracted data
-      // This would need to be implemented by calling update functions from useResume
-      goToEditor(newResume.meta.id)
+      const data = formData.extractedData || {}
+      const fullName = data.personalInfo?.fullName?.trim()
+      const resumeTitle = fullName ? `${fullName}'s Resume` : 'Imported Resume'
+
+      // Every section goes in with the resume in a single state update — see the
+      // note on createResumeWithData for why the per-section mutators cannot be
+      // used here.
+      const newResume = createResumeWithData(resumeTitle, {
+        template: formData.template,
+        personalInfo: {
+          ...data.personalInfo,
+          // An "Add link" row the user left blank shouldn't be persisted; the
+          // preview filters these out anyway, so it would just be dead data
+          // they'd have to delete in the editor.
+          links: (data.personalInfo?.links || []).filter(
+            (l) => (l.url || '').trim() || (l.label || '').trim()
+          ),
+        },
+        professionalInfo: formData.jobTarget,
+        summary: data.summary,
+        experience: data.experience,
+        education: data.education,
+        skills: data.skills,
+        projects: data.projects,
+        certifications: data.certifications,
+        languages: data.languages,
+        awards: data.awards,
+      })
+
+      // Don't navigate yet. Each page calls useResume() independently, so they
+      // share nothing but localStorage — and that write is debounced 500ms.
+      // Navigating now means EditorPage mounts and reads storage before the new
+      // resume is in it, which renders an empty editor. The effect below waits
+      // for the resume to land in state, flushes, and only then navigates.
+      setPendingNavigation(newResume.meta.id)
     } catch (error) {
       console.error('Error creating resume:', error)
       alert('Failed to create resume. Please try again.')
@@ -190,21 +294,57 @@ export function CreateFromPDF() {
             <div>
               <h2 className="text-2xl font-bold text-slate-900 mb-2" style={{ fontFamily: "'Sora', sans-serif" }}>Upload Your Resume</h2>
               <p className="text-slate-600 mb-6">Select a PDF file from your computer</p>
-              <PDFUpload 
+              {importError && (
+                <div className="mb-6 rounded-xl border border-amber-300 bg-amber-50 p-4">
+                  <div className="flex items-start gap-3">
+                    <svg className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold text-amber-900 mb-1">Couldn&rsquo;t import that resume</p>
+                      <p className="text-sm text-amber-800">{importError}</p>
+                      {/* An error can only exist after a file was chosen, so the
+                          retry target is always present — no need to read the ref
+                          during render to decide whether to offer it. */}
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button
+                          onClick={handleRetry}
+                          className="px-3 py-1.5 text-sm font-semibold rounded-lg bg-amber-600 text-white hover:bg-amber-700 transition"
+                        >
+                          Try again
+                        </button>
+                        <button
+                          onClick={goToCreateFromScratch}
+                          className="px-3 py-1.5 text-sm font-semibold rounded-lg bg-white border border-amber-300 text-amber-900 hover:bg-amber-100 transition"
+                        >
+                          Build from scratch instead
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <PDFUpload
                 onFileUploaded={handleFileUploaded}
                 processing={processing}
+                processingStage={processingStage}
+                fileName={fileName}
+                pageProgress={pageProgress}
+                retrySecondsLeft={retrySecondsLeft}
               />
             </div>
           )}
 
           {currentStep === 2 && formData.extractedData && (
-            <div className="space-y-6">
+            <div className="space-y-6 max-h-96 overflow-y-auto">
               <div>
                 <h2 className="text-2xl font-bold text-slate-900 mb-2" style={{ fontFamily: "'Sora', sans-serif" }}>Review Extracted Data</h2>
-                <p className="text-slate-600">Review and edit the information extracted from your PDF</p>
+                <p className="text-slate-600">Review and edit the information extracted from your PDF. You can fine-tune details here.</p>
               </div>
 
               <div className="space-y-4">
+                {/* Personal Information */}
                 <div className="bg-gradient-to-br from-slate-50 to-slate-100/50 rounded-xl p-4 border border-slate-200">
                   <h3 className="font-bold text-slate-900 mb-4 flex items-center gap-2">
                     <svg className="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -267,9 +407,85 @@ export function CreateFromPDF() {
                         className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                       />
                     </div>
+                    <div>
+                      <label className="text-xs font-bold text-slate-600 uppercase tracking-wider block mb-1.5">Address</label>
+                      <input
+                        type="text"
+                        value={formData.extractedData.personalInfo.address}
+                        onChange={(e) => setFormData({
+                          ...formData,
+                          extractedData: {
+                            ...formData.extractedData,
+                            personalInfo: {
+                              ...formData.extractedData.personalInfo,
+                              address: e.target.value
+                            }
+                          }
+                        })}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                      />
+                    </div>
+
+                    {/* Links — LinkedIn, GitHub, portfolio, etc. */}
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">
+                          Links
+                        </label>
+                        <button
+                          type="button"
+                          onClick={addLink}
+                          className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 transition"
+                        >
+                          + Add link
+                        </button>
+                      </div>
+
+                      {extractedLinks.length === 0 ? (
+                        <p className="text-xs text-slate-500 bg-white border border-dashed border-slate-300 rounded-lg px-3 py-2.5">
+                          No links found in your PDF. Add your LinkedIn, GitHub or portfolio &mdash;
+                          recruiters look for them.
+                        </p>
+                      ) : (
+                        <div className="space-y-2">
+                          {extractedLinks.map((link) => (
+                            <div key={link.id} className="flex gap-2">
+                              <input
+                                type="text"
+                                value={link.label || ''}
+                                onChange={(e) => updateLink(link.id, { label: e.target.value })}
+                                placeholder="LinkedIn"
+                                aria-label="Link name"
+                                className="w-1/3 min-w-0 px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm"
+                              />
+                              <input
+                                type="text"
+                                value={link.url || ''}
+                                onChange={(e) => updateLink(link.id, { url: e.target.value })}
+                                placeholder="linkedin.com/in/you"
+                                aria-label="Link URL"
+                                className="flex-1 min-w-0 px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => removeLink(link.id)}
+                                aria-label={`Remove ${link.label || 'link'}`}
+                                title="Remove"
+                                className="flex-shrink-0 px-2.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
 
+                {/* Professional Summary */}
                 <div className="bg-gradient-to-br from-slate-50 to-slate-100/50 rounded-xl p-4 border border-slate-200">
                   <h3 className="font-bold text-slate-900 mb-4 flex items-center gap-2">
                     <svg className="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -286,9 +502,81 @@ export function CreateFromPDF() {
                         summary: e.target.value
                       }
                     })}
-                    rows={4}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none"
+                    rows={3}
+                    placeholder="No summary found in PDF"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none text-sm"
                   />
+                </div>
+
+                {/* Experience Preview */}
+                {formData.extractedData.experience && formData.extractedData.experience.length > 0 && (
+                  <div className="bg-gradient-to-br from-slate-50 to-slate-100/50 rounded-xl p-4 border border-slate-200">
+                    <h3 className="font-bold text-slate-900 mb-3 flex items-center gap-2 text-sm">
+                      <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4m0 0L14 6m2-2l2 2M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                      </svg>
+                      Experience ({formData.extractedData.experience.length})
+                    </h3>
+                    <div className="space-y-2 text-xs">
+                      {formData.extractedData.experience.slice(0, 3).map((exp) => (
+                        <div key={exp.id} className="bg-white rounded p-2 border border-slate-200">
+                          <div className="font-semibold text-slate-900">{exp.jobTitle || 'Job Title'}</div>
+                          <div className="text-slate-600">{exp.company || 'Company'}</div>
+                        </div>
+                      ))}
+                      {formData.extractedData.experience.length > 3 && (
+                        <div className="text-slate-500 italic">+{formData.extractedData.experience.length - 3} more</div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Education Preview */}
+                {formData.extractedData.education && formData.extractedData.education.length > 0 && (
+                  <div className="bg-gradient-to-br from-slate-50 to-slate-100/50 rounded-xl p-4 border border-slate-200">
+                    <h3 className="font-bold text-slate-900 mb-3 flex items-center gap-2 text-sm">
+                      <svg className="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C6.5 6.253 2 10.998 2 17.25c0 5.105 3.07 9.772 7.5 11.855m0-13c5.5 0 10 4.745 10 10.25 0 5.105-3.07 9.772-7.5 11.855" />
+                      </svg>
+                      Education ({formData.extractedData.education.length})
+                    </h3>
+                    <div className="space-y-2 text-xs">
+                      {formData.extractedData.education.slice(0, 2).map((edu) => (
+                        <div key={edu.id} className="bg-white rounded p-2 border border-slate-200">
+                          <div className="font-semibold text-slate-900">{edu.degree || 'Degree'}</div>
+                          <div className="text-slate-600">{edu.school || 'School'}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Skills Preview */}
+                {formData.extractedData.skills && formData.extractedData.skills.length > 0 && (
+                  <div className="bg-gradient-to-br from-slate-50 to-slate-100/50 rounded-xl p-4 border border-slate-200">
+                    <h3 className="font-bold text-slate-900 mb-3 flex items-center gap-2 text-sm">
+                      <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      </svg>
+                      Skills ({formData.extractedData.skills.length})
+                    </h3>
+                    <div className="flex flex-wrap gap-2">
+                      {formData.extractedData.skills.slice(0, 8).map((skill) => (
+                        <span key={skill.id} className="bg-white border border-slate-300 rounded-full px-2.5 py-1 text-xs text-slate-700">
+                          {skill.name}
+                        </span>
+                      ))}
+                      {formData.extractedData.skills.length > 8 && (
+                        <span className="text-slate-500 text-xs italic">+{formData.extractedData.skills.length - 8} more</span>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <p className="text-sm text-blue-900">
+                    ℹ️ <strong>Tip:</strong> You can edit all details in the next step after creating the resume. This review is just a quick check.
+                  </p>
                 </div>
               </div>
             </div>
@@ -297,7 +585,10 @@ export function CreateFromPDF() {
           {currentStep === 3 && (
             <div>
               <h2 className="text-2xl font-bold text-slate-900 mb-2" style={{ fontFamily: "'Sora', sans-serif" }}>Target Job</h2>
-              <p className="text-slate-600 mb-6">Tell us about the job you're targeting to optimize your resume</p>
+              <p className="text-slate-600 mb-6">
+                We filled these in from your resume &mdash; change anything that doesn&rsquo;t match
+                the role you&rsquo;re going after.
+              </p>
               <JobTargetSetup
                 data={formData.jobTarget}
                 onChange={(jobTarget) => setFormData({ ...formData, jobTarget })}

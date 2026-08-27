@@ -1,386 +1,213 @@
-import express from 'express';
-import puppeteer from 'puppeteer';
+// server/routes/pdf.js
+//
+// Generates a REAL text-based PDF using Puppeteer's page.pdf().
+// This means:
+//   ✓ Selectable, copy-pasteable text
+//   ✓ ATS scanner readable
+//   ✓ Accessible (screen readers work)
+//   ✓ Small file size (vector text, not raster images)
+//   ✓ Pixel-identical to the live preview (same React component)
+//
+// How it works:
+//   1. Puppeteer opens /print in your running Vite app
+//   2. PrintPage.jsx renders ResumePreview for page 1
+//   3. We call page.pdf() — Chromium renders real DOM → PDF text layer
+//   4. For multi-page resumes, we generate each page separately and
+//      merge them with pdf-lib (pure JS, no native deps)
+
+import express    from 'express';
+import puppeteer  from 'puppeteer';
+import { getResumePageSize } from '../../src/utils/pageSizes.js';
+
 const router = express.Router();
 
-// Helper function to get template CSS
-function getTemplateCSS(template) {
-  const baseCSS = `
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-    
-    body {
-      font-family: 'Segoe UI', Arial, sans-serif;
-      font-size: 12px;
-      line-height: 1.5;
-      color: #334155;
-      padding: 0;
-      margin: 0;
-    }
-    
-    .container {
-      padding: 0.5in 1in 1in 1in;
-      width: 794px;
-      max-width: 794px;
-      position: relative;
-    }
-    
-    .header {
-      border-bottom: 2px solid #2563eb;
-      padding-bottom: 16px;
-      margin-bottom: 16px;
-    }
-    
-    .name {
-      font-size: 30px;
-      font-weight: bold;
-      color: #0f172a;
-      margin-bottom: 8px;
-    }
-    
-    .contact {
-      font-size: 14px;
-      color: #475569;
-      display: flex;
-      flex-wrap: wrap;
-      gap: 12px;
-    }
-    
-    .contact-item {
-      display: flex;
-      align-items: center;
-      gap: 4px;
-    }
-    
-    .section-header {
-      font-size: 14px;
-      font-weight: bold;
-      color: #0f172a;
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
-      margin-bottom: 8px;
-      color: #2563eb;
-      page-break-after: avoid;
-    }
-    
-    .section {
-      margin-bottom: 16px;
-      page-break-inside: avoid;
-    }
-    
-    .job-title {
-      font-size: 14px;
-      font-weight: bold;
-      color: #0f172a;
-      page-break-after: avoid;
-    }
-    
-    .company {
-      font-size: 12px;
-      font-weight: 600;
-      color: #475569;
-      margin-top: 2px;
-    }
-    
-    .date {
-      font-size: 12px;
-      color: #64748b;
-      white-space: nowrap;
-    }
-    
-    .description {
-      font-size: 12px;
-      color: #334155;
-      line-height: 1.6;
-      margin-top: 4px;
-      white-space: pre-line;
-    }
-    
-    .skill-badge {
-      display: inline-block;
-      background: #eff6ff;
-      color: #1d4ed8;
-      padding: 4px 8px;
-      margin: 2px;
-      border-radius: 4px;
-      font-size: 12px;
-      border: 1px solid #bfdbfe;
-      font-weight: 500;
-    }
-    
-    .entry {
-      margin-bottom: 12px;
-      page-break-inside: avoid;
-    }
-  `;
+// Page geometry is shared with the client (src/utils/pageSizes.js) rather than
+// duplicated here — that duplication is exactly how a PDF ends up a different
+// size than the preview it was supposed to match.
 
-  if (template === 'classic') {
-    return baseCSS.replace(/Segoe UI, Arial, sans-serif/g, 'Georgia, serif')
-      .replace(/#2563eb/g, '#0f172a')
-      .replace(/\.header \{[^}]+\}/g, '.header { border-bottom: 2px solid #0f172a; padding-bottom: 16px; margin-bottom: 16px; text-align: center; }')
-      .replace(/\.name \{[^}]+\}/g, '.name { font-size: 30px; font-weight: bold; color: #0f172a; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.05em; }')
-      .replace(/\.contact \{[^}]+\}/g, '.contact { font-size: 14px; color: #374151; display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; }')
-      .replace(/\.section-header \{[^}]+\}/g, '.section-header { font-size: 14px; font-weight: bold; color: #0f172a; text-transform: uppercase; margin-bottom: 8px; border-bottom: 1px solid #0f172a; padding-bottom: 8px; }')
-      .replace(/\.company \{[^}]+\}/g, '.company { font-size: 12px; font-style: italic; color: #374151; margin-top: 2px; }')
-      .replace(/\.skill-badge \{[^}]+\}/g, '.skill { font-size: 12px; color: #374151; }');
-  } else if (template === 'minimal') {
-    return baseCSS.replace(/Segoe UI, Arial, sans-serif/g, 'Helvetica, Arial, sans-serif')
-      .replace(/\.header \{[^}]+\}/g, '.header { margin-bottom: 16px; }')
-      .replace(/\.name \{[^}]+\}/g, '.name { font-size: 24px; font-weight: 300; color: #0f172a; letter-spacing: 0.05em; margin-bottom: 8px; }')
-      .replace(/\.contact \{[^}]+\}/g, '.contact { font-size: 12px; color: #6b7280; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 16px; gap: 8px; }')
-      .replace(/\.section-header \{[^}]+\}/g, '')
-      .replace(/\.skill-badge \{[^}]+\}/g, '.skill { font-size: 12px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.1em; margin-right: 8px; }');
-  }
+const ORIGIN = process.env.APP_ORIGIN || 'http://localhost:5173';
 
-  return baseCSS;
+// The client tells us where it's running, because only the browser knows which
+// port Vite actually settled on (it silently falls back to :5174 when :5173 is
+// taken, which used to make this route load a 404 and time out).
+//
+// Restricted to loopback: this value drives server-side navigation, so a remote
+// caller must not be able to point us at an arbitrary host.
+function resolveOrigin(requested) {
+  if (!requested) return ORIGIN;
+  try {
+    const { protocol, hostname } = new URL(requested);
+    const isHttp = protocol === 'http:' || protocol === 'https:';
+    const isLocal = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]';
+    if (isHttp && isLocal) return requested.replace(/\/+$/, '');
+  } catch { /* malformed — fall back below */ }
+  console.warn('[pdf] ignoring untrusted origin:', requested, '— using', ORIGIN);
+  return ORIGIN;
 }
 
-// Helper function to generate HTML from resume data
-function generateResumeHTML(resume, template) {
-  let html = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="UTF-8">
-      <style>
-        ${getTemplateCSS(template)}
-      </style>
-    </head>
-    <body>
-      <div class="container">
-        <div class="header">
-          <div class="name">${resume.personalInfo.fullName || 'Your Name'}</div>
-          <div class="contact">
-            ${resume.personalInfo.email ? `<div class="contact-item">
-              <svg style="width: 16px; height: 16px; color: #2563eb; margin-right: 4px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
-              </svg>
-              ${resume.personalInfo.email}
-            </div>` : ''}
-            ${resume.personalInfo.phone ? `<div class="contact-item">
-              <svg style="width: 16px; height: 16px; color: #2563eb; margin-right: 4px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/>
-              </svg>
-              ${resume.personalInfo.phone}
-            </div>` : ''}
-            ${resume.personalInfo.address ? `<div class="contact-item">
-              <svg style="width: 16px; height: 16px; color: #2563eb; margin-right: 4px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
-              </svg>
-              ${resume.personalInfo.address}
-            </div>` : ''}
-          </div>
-        </div>
-  `;
+// ─── Puppeteer margin = 0 because ResumePreview handles its own padding ───────
+const PDF_MARGIN = { top: '0', right: '0', bottom: '0', left: '0' };
 
-  // Summary
-  if (resume.summary) {
-    html += `
-      <div class="section">
-        <div class="section-header">Professional Summary</div>
-        <div class="description">${resume.summary}</div>
-      </div>
-    `;
-  }
-
-  // Experience
-  if (resume.experience && resume.experience.length > 0) {
-    html += '<div class="section">';
-    if (template !== 'minimal') {
-      html += '<div class="section-header">Experience</div>';
-    }
-    resume.experience.forEach(exp => {
-      html += `
-        <div class="entry">
-          <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-            <div class="job-title">${exp.title || exp.jobTitle}</div>
-            <div class="date">${exp.startDate}${exp.endDate ? ` - ${exp.endDate}` : ''}</div>
-          </div>
-          <div class="company">${exp.company}</div>
-          ${exp.description ? `<div class="description">${exp.description}</div>` : ''}
-        </div>
-      `;
-    });
-    html += '</div>';
-  }
-
-  // Education
-  if (resume.education && resume.education.length > 0) {
-    html += '<div class="section">';
-    if (template !== 'minimal') {
-      html += '<div class="section-header">Education</div>';
-    }
-    resume.education.forEach(edu => {
-      html += `
-        <div class="entry">
-          <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-            <div class="job-title">${edu.degree}</div>
-            ${edu.graduationDate ? `<div class="date">${edu.graduationDate}</div>` : ''}
-          </div>
-          <div class="company">${edu.school}</div>
-          ${edu.field ? `<div class="description">Field of Study: ${edu.field}</div>` : ''}
-        </div>
-      `;
-    });
-    html += '</div>';
-  }
-
-  // Skills
-  if (resume.skills && resume.skills.length > 0) {
-    html += '<div class="section">';
-    if (template !== 'minimal') {
-      html += '<div class="section-header">Skills</div>';
-    }
-    if (template === 'modern') {
-      html += '<div>';
-      resume.skills.forEach(skill => {
-        html += `<span class="skill-badge">${skill.name}${skill.level ? ` · ${skill.level}` : ''}</span>`;
-      });
-      html += '</div>';
-    } else if (template === 'classic') {
-      html += `<div class="skill">${resume.skills.map(s => s.name).join(' • ')}</div>`;
-    } else {
-      html += `<div class="skill">${resume.skills.map(s => s.name).join(' / ')}</div>`;
-    }
-    html += '</div>';
-  }
-
-  // Projects
-  if (resume.projects && resume.projects.length > 0) {
-    html += '<div class="section">';
-    if (template !== 'minimal') {
-      html += '<div class="section-header">Projects</div>';
-    }
-    resume.projects.forEach(proj => {
-      html += `
-        <div class="entry">
-          <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-            <div class="job-title">${proj.name}</div>
-            ${proj.link ? `<div class="date">${proj.link}</div>` : ''}
-          </div>
-          ${proj.technologies ? `<div class="company">${proj.technologies}</div>` : ''}
-          ${proj.description ? `<div class="description">${proj.description}</div>` : ''}
-        </div>
-      `;
-    });
-    html += '</div>';
-  }
-
-  // Certifications
-  if (resume.certifications && resume.certifications.length > 0) {
-    html += '<div class="section">';
-    if (template !== 'minimal') {
-      html += '<div class="section-header">Certifications</div>';
-    }
-    resume.certifications.forEach(cert => {
-      html += `
-        <div class="entry">
-          <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-            <div class="job-title">${cert.name}</div>
-            <div class="date">${cert.issuer}${cert.date ? `, ${cert.date}` : ''}</div>
-          </div>
-        </div>
-      `;
-    });
-    html += '</div>';
-  }
-
-  // Languages
-  if (resume.languages && resume.languages.length > 0) {
-    html += '<div class="section">';
-    if (template !== 'minimal') {
-      html += '<div class="section-header">Languages</div>';
-    }
-    const languagesStr = resume.languages.map(l => `${l.name}${l.proficiency ? ` (${l.proficiency})` : ''}`).join(' • ');
-    html += `<div class="description">${languagesStr}</div>`;
-    html += '</div>';
-  }
-
-  // Awards
-  if (resume.awards && resume.awards.length > 0) {
-    html += '<div class="section">';
-    if (template !== 'minimal') {
-      html += '<div class="section-header">Awards</div>';
-    }
-    resume.awards.forEach(award => {
-      html += `
-        <div class="entry">
-          <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-            <div class="job-title">${award.title}</div>
-            <div class="date">${award.issuer}${award.date ? `, ${award.date}` : ''}</div>
-          </div>
-        </div>
-      `;
-    });
-    html += '</div>';
-  }
-
-  html += `
-      </div>
-    </body>
-    </html>
-  `;
-  return html;
-}
 
 router.post('/generate', async (req, res) => {
+  let browser;
   try {
-    const { resume, template } = req.body;
-    
-    console.log('Generating PDF for template:', template);
-    
-    // Launch headless browser
-    const browser = await puppeteer.launch({
+    const { resume, template = 'modern', origin } = req.body;
+    const appOrigin = resolveOrigin(origin);
+    const name = resume?.personalInfo?.fullName || 'Resume';
+
+    // Whatever paper the user picked in Customize — same module the preview
+    // reads, so viewport and PDF page size can't disagree with the screen.
+    const page = getResumePageSize(resume);
+
+    console.log('[pdf] start — template:', template, '— page:', page.label, page.dimensions, '— origin:', appOrigin);
+
+    browser = await puppeteer.launch({
       headless: 'new',
-      args: ['--no-sandbox', '--disable-setuid-sandbox']
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-web-security',
+        '--font-render-hinting=none',
+      ],
     });
-    
-    const page = await browser.newPage();
-    
-    // Generate HTML from resume data
-    const html = generateResumeHTML(resume, template);
-    
-    // Set HTML content
-    await page.setContent(html, { waitUntil: 'networkidle0' });
-    
-    // Generate PDF
-    const pdfBuffer = await page.pdf({
-      format: 'A4',
-      margin: {
-        top: '0',
-        right: '0',
-        bottom: '0',
-        left: '0'
-      },
-      printBackground: true,
-      displayHeaderFooter: true,
-      headerTemplate: '',
-      footerTemplate: `
-        <div style="font-size: 14px; color: #6b7280; text-align: right; padding-right: 24px; padding-bottom: 16px; width: 100%; opacity: 0.7;">
-          Page <span class="pageNumber"></span>
-        </div>
-      `
+
+    // ── Step 1: open the print page, find out how many pages ─────────────────
+    const probePage = await browser.newPage();
+    await probePage.setViewport({ width: page.width, height: page.height });
+
+    // Inject data before page scripts run
+    await probePage.evaluateOnNewDocument((r, t) => {
+      window.__PRINT_RESUME__   = r;
+      window.__PRINT_TEMPLATE__ = t;
+    }, resume, template);
+
+    const probeResponse = await probePage.goto(`${appOrigin}/print`, {
+      waitUntil: 'networkidle0',
+      timeout: 30_000,
     });
-    
+
+    // A 404 here means we're pointed at the wrong port or the app isn't running.
+    // Without this check the next step just waits 10s for a global that never
+    // arrives and reports an opaque Puppeteer timeout.
+    if (!probeResponse || !probeResponse.ok()) {
+      throw new Error(
+        `The app isn't reachable at ${appOrigin}/print (HTTP ${probeResponse?.status() ?? 'no response'}). ` +
+        `Make sure "npm run dev" is running, and that it's serving that port.`
+      );
+    }
+
+    // Render using SCREEN styles, not print styles. Puppeteer's page.pdf()
+    // defaults to print-media emulation, but the app ships a legacy
+    // `@media print { * { visibility:hidden } }` rule (App.css) from the old
+    // window.print() flow. Forcing screen media makes the PDF an exact match
+    // of the live preview the user sees on screen.
+    await probePage.emulateMediaType('screen');
+
+    // Wait for ResumePreview to report its page count
+    const totalPages = await probePage.waitForFunction(
+      () => typeof window.__PRINT_TOTAL_PAGES__ === 'number' && window.__PRINT_TOTAL_PAGES__ >= 1,
+      { timeout: 10_000 }
+    ).then(() => probePage.evaluate(() => window.__PRINT_TOTAL_PAGES__))
+     .catch(() => {
+       throw new Error(
+         `Loaded ${appOrigin}/print but it never reported a page count — the print ` +
+         `page likely hit a render error. Check the browser console on that URL.`
+       );
+     });
+
+    await probePage.close();
+
+    console.log('[pdf] total pages:', totalPages);
+
+    // ── Step 2: generate one PDF per page, then merge ─────────────────────────
+    // Each PDF is exactly one page of the chosen size, with a real text layer.
+    const pagePDFs = [];
+
+    for (let p = 1; p <= totalPages; p++) {
+      const pg = await browser.newPage();
+
+      await pg.setViewport({ width: page.width, height: page.height });
+
+      // Inject data + the specific page number
+      await pg.evaluateOnNewDocument((r, t, pageNum) => {
+        window.__PRINT_RESUME__        = r;
+        window.__PRINT_TEMPLATE__      = t;
+        window.__PRINT_INITIAL_PAGE__  = pageNum;
+      }, resume, template, p);
+
+      await pg.goto(`${appOrigin}/print`, {
+        waitUntil: 'networkidle0',
+        timeout: 30_000,
+      });
+
+      // Match the live preview: render with screen styles, not print styles.
+      // (See note in the probe step above.)
+      await pg.emulateMediaType('screen');
+
+      // Wait for this page's content to be ready
+      await pg.waitForFunction(
+        (pageNum) => window.__PRINT_CURRENT_PAGE__ === pageNum,
+        { timeout: 8_000 },
+        p
+      );
+
+      // Wait for fonts and layout to settle
+      await new Promise(r => setTimeout(r, 200));
+
+      // page.pdf() produces a real text-based PDF
+      const pdfBuf = await pg.pdf({
+        width:           page.widthMM,
+        height:          page.heightMM,
+        margin:          PDF_MARGIN,
+        printBackground: true,
+        // No displayHeaderFooter — footer is rendered inside ResumePreview itself
+      });
+
+      pagePDFs.push(pdfBuf);
+      await pg.close();
+
+      console.log(`[pdf] rendered page ${p}/${totalPages}`);
+    }
+
     await browser.close();
-    
-    console.log('PDF generated successfully');
-    
-    // Send PDF as response
+    browser = null;
+
+    // ── Step 3: merge all single-page PDFs into one document ─────────────────
+    const merged = await mergePDFs(pagePDFs, name);
+
+    console.log('[pdf] done — bytes:', merged.length);
+
     res.set({
-      'Content-Type': 'application/pdf',
-      'Content-Disposition': 'attachment; filename=resume.pdf',
-      'Content-Length': pdfBuffer.length
+      'Content-Type':        'application/pdf',
+      'Content-Disposition': `attachment; filename="${encodeURIComponent(name)}.pdf"`,
+      'Content-Length':      merged.length,
     });
-    
-    res.send(pdfBuffer);
-  } catch (error) {
-    console.error('PDF generation error:', error);
-    res.status(500).json({ error: 'Failed to generate PDF', message: error.message });
+    res.send(merged);
+
+  } catch (err) {
+    if (browser) await browser.close().catch(() => {});
+    console.error('[pdf] error:', err);
+    res.status(500).json({ error: 'Failed to generate PDF', message: err.message });
   }
 });
+
+// ─── Merge multiple single-page PDFs into one ─────────────────────────────────
+async function mergePDFs(pdfBuffers, authorName) {
+  const { PDFDocument } = await import('pdf-lib');
+
+  const merged = await PDFDocument.create();
+  merged.setAuthor(authorName);
+  merged.setCreator('AI Resume Builder');
+  merged.setProducer('Puppeteer + pdf-lib');
+
+  for (const buf of pdfBuffers) {
+    const src   = await PDFDocument.load(buf);
+    const pages = await merged.copyPages(src, src.getPageIndices());
+    pages.forEach(pg => merged.addPage(pg));
+  }
+
+  return Buffer.from(await merged.save());
+}
 
 export default router;

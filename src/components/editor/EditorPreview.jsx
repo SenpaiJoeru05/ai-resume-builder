@@ -1,9 +1,8 @@
 // EditorPreview.jsx
 import { useRef, useEffect, useState, useCallback } from 'react'
 import { ResumePreview } from '../ResumePreview'
+import { getResumePageSize } from '../../utils/pageSizes'
 
-const A4_W    = 794
-const A4_H    = 1123
 const SIDE_PAD = 48
 
 export function EditorPreview({
@@ -17,6 +16,10 @@ export function EditorPreview({
   onPageCountChange,
   onPageChange,
 }) {
+  // Paper size comes from the resume, so the fit-to-width scaler and the
+  // rendered page always agree with what the PDF will be.
+  const { width: pageW, height: pageH } = getResumePageSize(resume)
+
   const selectedTemplate = template || 'modern'
   const panelRef = useRef(null)
   const [scale, setScale]       = useState(1)
@@ -28,7 +31,7 @@ export function EditorPreview({
     if (!el) return
     const update = () => {
       const available = el.clientWidth - SIDE_PAD * 2
-      setScale(Math.min(1, available / A4_W))
+      setScale(Math.min(1, available / pageW))
     }
     update()
     const ro = new ResizeObserver(update)
@@ -112,16 +115,16 @@ export function EditorPreview({
           <div
             style={{
               position:  'relative',
-              width:     A4_W * scale,
-              height:    A4_H * scale,
+              width:     pageW * scale,
+              height:    pageH * scale,
               flexShrink: 0,
             }}
           >
             <div
               className="cv-paper"
               style={{
-                width:           A4_W,
-                height:          A4_H,
+                width:           pageW,
+                height:          pageH,
                 transform:       `scale(${scale})`,
                 transformOrigin: 'top left',
                 position:        'absolute',

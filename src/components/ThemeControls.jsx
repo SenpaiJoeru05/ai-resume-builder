@@ -1,3 +1,5 @@
+import { PAGE_SIZE_LIST, DEFAULT_PAGE_SIZE } from '../utils/pageSizes';
+
 export function ThemeControls({ theme, onUpdate }) {
   const accentColors = [
     { name: 'Blue', value: '#2563eb' },
@@ -17,6 +19,11 @@ export function ThemeControls({ theme, onUpdate }) {
   const densities = [
     { name: 'Comfortable', value: 'comfortable' },
     { name: 'Compact', value: 'compact' },
+  ];
+
+  const skillStyles = [
+    { name: 'Inline list', value: 'inline', hint: 'Front-End: React, Vue' },
+    { name: 'Boxes',       value: 'pills',  hint: 'each skill in a chip' },
   ];
 
   return (
@@ -88,6 +95,65 @@ export function ThemeControls({ theme, onUpdate }) {
               {density.name}
             </button>
           ))}
+        </div>
+      </div>
+
+      {/* Skills Layout */}
+      <div>
+        <label className="block text-sm font-medium text-slate-700 mb-1">Skills Layout</label>
+        <p className="text-xs text-slate-500 mb-3">
+          Inline fits far more per line and is easier for applicant-tracking systems to read.
+        </p>
+        <div className="grid grid-cols-2 gap-3">
+          {skillStyles.map((style) => {
+            const active = (theme.skillStyle || 'inline') === style.value;
+            return (
+              <button
+                key={style.value}
+                onClick={() => onUpdate({ skillStyle: style.value })}
+                aria-pressed={active}
+                className={`px-3 py-2.5 rounded-lg border-2 text-left transition ${
+                  active ? 'border-blue-600 bg-blue-50' : 'border-slate-200 hover:border-slate-300'
+                }`}
+              >
+                <span className={`block text-sm font-semibold ${active ? 'text-blue-700' : 'text-slate-700'}`}>
+                  {style.name}
+                </span>
+                <span className="block text-[11px] text-slate-400 mt-0.5">{style.hint}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Page Size */}
+      <div>
+        <label className="block text-sm font-medium text-slate-700 mb-1">Page Size</label>
+        <p className="text-xs text-slate-500 mb-3">
+          Changing this re-flows the resume, so it can change the page count.
+        </p>
+        <div className="grid grid-cols-2 gap-3">
+          {PAGE_SIZE_LIST.map((size) => {
+            const active = (theme.pageSize || DEFAULT_PAGE_SIZE) === size.key;
+            return (
+              <button
+                key={size.key}
+                onClick={() => onUpdate({ pageSize: size.key })}
+                aria-pressed={active}
+                className={`px-3 py-2.5 rounded-lg border-2 text-left transition ${
+                  active
+                    ? 'border-blue-600 bg-blue-50'
+                    : 'border-slate-200 hover:border-slate-300'
+                }`}
+              >
+                <span className={`block text-sm font-semibold ${active ? 'text-blue-700' : 'text-slate-700'}`}>
+                  {size.label}
+                </span>
+                <span className="block text-xs text-slate-500 tabular-nums mt-0.5">{size.dimensions}</span>
+                <span className="block text-[11px] text-slate-400 mt-0.5">{size.note}</span>
+              </button>
+            );
+          })}
         </div>
       </div>
     </div>

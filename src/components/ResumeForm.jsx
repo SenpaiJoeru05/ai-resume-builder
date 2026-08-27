@@ -7,6 +7,10 @@ import { ATSScore } from './ATSScore';
 import { ResumesDashboard } from './ResumesDashboard';
 import { SummaryVariations } from './SummaryVariations';
 import { PDFImport } from './PDFImport';
+import { processProfilePhoto } from '../utils/image';
+import { PhotoControls } from './PhotoControls';
+import { AutocompleteInput } from './shared/AutocompleteInput';
+import { JOB_TITLES, INDUSTRIES, SKILLS, LANGUAGES, DEGREES, FIELDS_OF_STUDY } from '../data/suggestions';
 
 const SKILL_CATEGORIES = ['Technical', 'Tools', 'Soft Skills', 'Languages', 'Other'];
 const SKILL_LEVELS = ['Beginner', 'Intermediate', 'Advanced', 'Expert'];
@@ -188,6 +192,21 @@ export function ResumeForm({
 
   /* ----------------------------- Add handlers ---------------------------- */
 
+  const handlePhotoSelect = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // allow re-selecting the same file
+    if (!file) return;
+    try {
+      const dataUrl = await processProfilePhoto(file);
+      updatePersonalInfo({ photo: dataUrl });
+      // Re-enable display if the user had previously hidden the photo.
+      if (resume.meta?.theme?.showPhoto === false) updateTheme({ showPhoto: true });
+      toast.success('Photo added');
+    } catch (err) {
+      toast.error(err.message || 'Could not add photo');
+    }
+  };
+
   const handleAddSkill = () => {
     if (skillInput.trim()) {
       addSkill({ name: skillInput.trim(), category: skillCategory, level: skillLevel });
@@ -329,21 +348,21 @@ export function ResumeForm({
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-slate-700">Target Job Title *</label>
-                  <input
-                    type="text"
+                  <AutocompleteInput
                     placeholder="e.g., Senior Frontend Engineer"
                     value={resume.professionalInfo.jobTitle}
-                    onChange={(e) => updateProfessionalInfo({ jobTitle: e.target.value })}
+                    onChange={(v) => updateProfessionalInfo({ jobTitle: v })}
+                    suggestions={JOB_TITLES}
                     className={inputClass}
                   />
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-slate-700">Industry</label>
-                  <input
-                    type="text"
+                  <AutocompleteInput
                     placeholder="e.g., Technology, Healthcare, Finance"
                     value={resume.professionalInfo.industry}
-                    onChange={(e) => updateProfessionalInfo({ industry: e.target.value })}
+                    onChange={(v) => updateProfessionalInfo({ industry: v })}
+                    suggestions={INDUSTRIES}
                     className={inputClass}
                   />
                 </div>
@@ -417,6 +436,49 @@ export function ResumeForm({
         return (
           <section className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 animate-fadeIn">
             <SectionHeader title="Personal Information" subtitle="Let's start with your basic contact details" />
+
+            {/* Profile photo */}
+            <div className="mb-6 pb-6 border-b border-slate-200">
+              <div className="flex items-center gap-4">
+                <div className="w-20 h-20 rounded-full overflow-hidden bg-slate-100 border border-slate-200 flex items-center justify-center flex-shrink-0">
+                  {resume.personalInfo.photo ? (
+                    <img src={resume.personalInfo.photo} alt="Profile" className="w-full h-full object-cover" />
+                  ) : (
+                    <svg className="w-9 h-9 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-3">
+                    <label className="inline-flex items-center gap-2 px-3.5 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 cursor-pointer transition">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                      {resume.personalInfo.photo ? 'Change Photo' : 'Upload Photo'}
+                      <input type="file" accept="image/*" onChange={handlePhotoSelect} className="hidden" />
+                    </label>
+                    {resume.personalInfo.photo && (
+                      <button
+                        onClick={() => updatePersonalInfo({ photo: '' })}
+                        className="text-sm text-red-600 hover:text-red-700 font-medium"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                  <PhotoControls
+                    theme={resume.meta?.theme}
+                    updateTheme={updateTheme}
+                    hasPhoto={!!resume.personalInfo.photo}
+                  />
+                  <p className="text-xs text-slate-400 max-w-sm">
+                    Optional. Great for creative or international (EU) CVs. For US roles and ATS systems, a photo-free resume is usually safer.
+                  </p>
+                </div>
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               <div className="space-y-2">
                 <label className="text-sm font-medium text-slate-700">Full Name *</label>
@@ -749,21 +811,21 @@ export function ResumeForm({
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-slate-700">Degree *</label>
-                    <input
-                      type="text"
+                    <AutocompleteInput
                       placeholder="Bachelor's, Master's, etc."
                       value={newEducation.degree}
-                      onChange={(e) => setNewEducation({ ...newEducation, degree: e.target.value })}
+                      onChange={(v) => setNewEducation({ ...newEducation, degree: v })}
+                      suggestions={DEGREES}
                       className={inputClass}
                     />
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-slate-700">Field of Study</label>
-                    <input
-                      type="text"
+                    <AutocompleteInput
                       placeholder="Computer Science, Business, etc."
                       value={newEducation.field}
-                      onChange={(e) => setNewEducation({ ...newEducation, field: e.target.value })}
+                      onChange={(v) => setNewEducation({ ...newEducation, field: v })}
+                      suggestions={FIELDS_OF_STUDY}
                       className={inputClass}
                     />
                   </div>
@@ -829,13 +891,14 @@ export function ResumeForm({
             <div className="space-y-6">
               {/* Add Skill */}
               <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
-                <input
-                  type="text"
+                <AutocompleteInput
                   placeholder="Add a skill (e.g., JavaScript)"
                   value={skillInput}
-                  onChange={(e) => setSkillInput(e.target.value)}
+                  onChange={setSkillInput}
+                  suggestions={SKILLS}
                   onKeyDown={(e) => e.key === 'Enter' && handleAddSkill()}
-                  className={`${inputClass} md:col-span-5`}
+                  className={inputClass}
+                  wrapperClassName="md:col-span-5"
                 />
                 <select
                   value={skillCategory}
@@ -1077,12 +1140,14 @@ export function ResumeForm({
             <SectionHeader title="Languages" subtitle="Add languages you speak (optional)" />
             <div className="bg-slate-50 rounded-lg p-5 mb-6 border border-slate-200">
               <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
-                <input
-                  type="text"
+                <AutocompleteInput
                   placeholder="Language *"
                   value={newLanguage.name}
-                  onChange={(e) => setNewLanguage({ ...newLanguage, name: e.target.value })}
-                  className={`${inputClass} md:col-span-6`}
+                  onChange={(v) => setNewLanguage({ ...newLanguage, name: v })}
+                  suggestions={LANGUAGES}
+                  onKeyDown={(e) => e.key === 'Enter' && handleAddLanguage()}
+                  className={inputClass}
+                  wrapperClassName="md:col-span-6"
                 />
                 <select
                   value={newLanguage.proficiency}
