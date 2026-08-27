@@ -1,11 +1,32 @@
 // ResumePreview.jsx
 import React, { useRef, useEffect, useState } from 'react'
+import { getPageSize } from '../utils/pageSizes'
 
+// Default ordering for the built-in categories. Custom categories a user types
+// ("Front-End", "Back-End & AI") are NOT limited to this list — they render
+// after these, in the order they first appear in the skills array.
 const SKILL_ORDER = ['Technical', 'Tools', 'Soft Skills', 'Languages', 'Other'];
 
-// A4 at 96 dpi
-const A4_W = 794;
-const A4_H = 1123;
+// Groups skills by category for rendering.
+//
+// This used to map over SKILL_ORDER and filter, which meant any skill with a
+// category outside those five matched no group and was SILENTLY DROPPED from
+// both the preview and the PDF — a resume imported with "Front-End" or
+// "Databases & Tools" lost those skills with no error. Now every category
+// present in the data gets a group.
+function groupSkills(skills) {
+  const groups = new Map();
+  for (const skill of skills) {
+    const cat = (skill.category || 'Other').trim() || 'Other';
+    if (!groups.has(cat)) groups.set(cat, []);
+    groups.get(cat).push(skill);
+  }
+  // Built-ins keep their conventional order (so existing resumes don't shuffle);
+  // anything user-named follows, in first-appearance order.
+  const known = SKILL_ORDER.filter(c => groups.has(c));
+  const custom = [...groups.keys()].filter(c => !SKILL_ORDER.includes(c));
+  return [...known, ...custom].map(cat => [cat, groups.get(cat)]);
+}
 
 // ─── Professional resume margins (96 dpi: 0.75in = 72px) ─────────────────────
 const MARGINS = {
@@ -24,6 +45,26 @@ const ENTRY_GAP = 8;
 // Gap between sections
 const SECTION_GAP = 16;
 
+// Per-template pagination tuning. `header` = approx height of the page-1
+// name/contact block; `extra` = vertical chrome a template adds on EVERY page
+// (e.g. Creative's white content card padding). Subtracting these from the
+// paginator budget keeps content from overflowing and getting clipped.
+const TEMPLATE_CHROME = {
+  modern:       { extra: 0,  header: 100 },
+  classic:      { extra: 0,  header: 120 },
+  minimal:      { extra: 0,  header: 90  },
+  'ats-safe':   { extra: 0,  header: 100 },
+  creative:     { extra: 64, header: 150 },
+  'two-column': { extra: 0,  header: 90  },
+};
+
+// Two-column template: long-form sections fill the wide main column; short
+// list-style sections go in the narrow sidebar. Used by BOTH the paginator
+// (to measure at the right width) and the renderer (to place sections), so
+// they stay in sync.
+const TWO_COL_LEFT  = ['summary', 'experience', 'education', 'projects'];
+const TWO_COL_RIGHT = ['skills', 'certifications', 'languages', 'awards'];
+
 const FONT_FAMILIES = {
   sans:   "'Segoe UI', Arial, sans-serif",
   serif:  "'Georgia', serif",
@@ -36,6 +77,23 @@ function expDateLabel(exp) {
 }
 function hasBullets(exp) {
   return Array.isArray(exp.bullets) && exp.bullets.some(b => b.text?.trim());
+}
+// Renders a multi-role headline with pipes rather than commas: "Web Developer |
+// Data Analyst" reads as two distinct roles, where a comma reads as one long
+// title. Splits on commas the user typed, drops empties, and leaves a title that
+// already uses pipes untouched.
+function formatJobTitle(raw) {
+  const parts = String(raw || '')
+    .split(',')
+    .map(part => part.trim())
+    .filter(Boolean);
+  return parts.join(' | ');
+}
+
+// The target role rendered under the name. Module-scope (not defined during
+// render) so it keeps a stable identity across renders.
+function JobTitleLine({ jobTitle, className = '', style = {} }) {
+  return jobTitle ? <p className={className} style={style}>{jobTitle}</p> : null;
 }
 function ExpBody({ exp }) {
   if (hasBullets(exp))
@@ -51,15 +109,58 @@ function ExpBody({ exp }) {
 // ─── main ─────────────────────────────────────────────────────────────────────
 export function ResumePreview({ resume, template = 'modern', currentPage = 1, onPageCountChange }) {
   const {
-    personalInfo, summary, experience = [], education = [], skills = [],
+    personalInfo, professionalInfo = {}, summary, experience = [], education = [], skills = [],
     projects = [], certifications = [], languages = [], awards = [],
     meta = {}, sectionConfig = [],
   } = resume;
 
   const theme   = meta.theme || { accentColor: '#2563eb', font: 'sans', density: 'comfortable' };
+  // Chosen paper size drives both the rendered page box and the pagination
+  // budget, so a taller page genuinely fits more content per page.
+  const page    = getPageSize(theme.pageSize);
+  const pageW   = page.width;
+  const pageH   = page.height;
   const margins = MARGINS[theme.density] ?? MARGINS.comfortable;
   const font    = FONT_FAMILIES[theme.font] ?? FONT_FAMILIES.sans;
   const links   = (personalInfo.links || []).filter(l => l.url || l.label);
+
+  // The target role, shown under the name — the convention on virtually every
+  // real resume. Comes from Job Target (professionalInfo), not the latest job,
+  // so it reflects the role being applied FOR rather than the one last held.
+  const jobTitle = formatJobTitle(professionalInfo.jobTitle);
+
+  // ── Optional profile photo ────────────────────────────────────────────────
+  // Shown in the page-1 header of photo-friendly templates. Skipped for
+  // 'ats-safe' on purpose — ATS parsers can't read images and a photo can hurt
+  // automated screening, so that template stays text-only.
+  const showPhoto  = !!personalInfo.photo && theme.showPhoto !== false && template !== 'ats-safe';
+  const photoAlign = theme.photoAlign || 'left';            // left | center | right
+  const photoRadius =                                       // shape → corner radius
+    theme.photoShape === 'square'  ? '4px'  :
+    theme.photoShape === 'rounded' ? '14px' : '9999px';     // default: circle
+
+  // The avatar floats so the name/contacts flow beside it (left/right), or sits
+  // as a centered block above the name (center). Header containers set
+  // `display: flow-root` so the float is contained and the divider sits below.
+  const PhotoAvatar = ({ size = 72, style = {} }) => {
+    if (!showPhoto) return null;
+    const renderSize = theme.photoSize || size;             // user-set size overrides the template default
+    const place =
+      photoAlign === 'center' ? { display: 'block', margin: '0 auto 12px' } :
+      photoAlign === 'right'  ? { float: 'right', margin: '0 0 8px 18px' } :
+                                { float: 'left',  margin: '0 18px 8px 0' };
+    return (
+      <img
+        src={personalInfo.photo}
+        alt=""
+        aria-hidden="true"
+        style={{
+          width: renderSize, height: renderSize, objectFit: 'cover', borderRadius: photoRadius,
+          border: `2px solid ${theme.accentColor}`, ...place, ...style,
+        }}
+      />
+    );
+  };
 
   const orderedSections = sectionConfig.length > 0
     ? sectionConfig.filter(s => s.visible).sort((a,b) => a.order - b.order).map(s => s.key)
@@ -69,9 +170,12 @@ export function ResumePreview({ resume, template = 'modern', currentPage = 1, on
     sectionConfig.find(s => s.key === key)?.label ||
     key.charAt(0).toUpperCase() + key.slice(1);
 
-  const skillGroups = () =>
-    SKILL_ORDER.map(cat => [cat, skills.filter(s => (s.category||'Other') === cat)])
-               .filter(([,items]) => items.length);
+  const skillGroups = () => groupSkills(skills);
+  // Inline ("Front-End: React, Vue, Tailwind") is the default: it fits roughly
+  // 4x more skills per line than chips and is far easier for an ATS to parse,
+  // since each skill isn't wrapped in its own styled element. Chips stay
+  // available via Customize for the more visual templates.
+  const skillsAsPills = theme.skillStyle === 'pills';
 
   // ── Build flat entry list ─────────────────────────────────────────────────
   const buildEntries = (headingClass) => {
@@ -133,21 +237,34 @@ export function ResumePreview({ resume, template = 'modern', currentPage = 1, on
         add(sk, true, (
           <div>
             <h2 className={headingClass}>{labelFor(sk)}</h2>
-            <div className="space-y-2">
-              {groups.map(([cat, items]) => (
-                <div key={cat}>
-                  {groups.length > 1 && <p className="text-xs font-semibold text-slate-500 mb-1">{cat}</p>}
-                  <div className="flex flex-wrap gap-2">
-                    {items.map(skill => (
-                      <span key={skill.id} className="px-2 py-1 rounded text-xs border font-medium"
-                        style={{ backgroundColor:`${theme.accentColor}15`, color:theme.accentColor, borderColor:`${theme.accentColor}40` }}>
-                        {skill.name}{skill.level ? ` · ${skill.level}` : ''}
-                      </span>
-                    ))}
+            {skillsAsPills ? (
+              <div className="space-y-2">
+                {groups.map(([cat, items]) => (
+                  <div key={cat}>
+                    {groups.length > 1 && <p className="text-xs font-semibold text-slate-500 mb-1">{cat}</p>}
+                    <div className="flex flex-wrap gap-2">
+                      {items.map(skill => (
+                        <span key={skill.id} className="px-2 py-1 rounded text-xs border font-medium"
+                          style={{ backgroundColor:`${theme.accentColor}15`, color:theme.accentColor, borderColor:`${theme.accentColor}40` }}>
+                          {skill.name}
+                        </span>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            ) : (
+              <div className="space-y-1">
+                {groups.map(([cat, items]) => (
+                  <p key={cat} className="text-xs text-slate-700 leading-relaxed">
+                    {groups.length > 1 && (
+                      <span className="font-semibold text-slate-900">{cat}: </span>
+                    )}
+                    {items.map(sk2 => sk2.name).filter(Boolean).join(', ')}
+                  </p>
+                ))}
+              </div>
+            )}
           </div>
         ), 'skills-0');
       }
@@ -224,29 +341,58 @@ export function ResumePreview({ resume, template = 'modern', currentPage = 1, on
 
       // ── Budget: how many px of entries fit per page ───────────────────────
       //
-      //  Total inner height = A4_H − top margin − bottom margin
+      //  Total inner height = page height − top margin − bottom margin
       //  We then subtract FOOTER_H so entries can never visually reach
       //  the footer strip (which lives inside the bottom margin).
       //
       //   Page 1  → also subtract HEADER_H (name/contact block)
       //   Page 2+ → full inner height minus footer only
       //
-      const innerH   = A4_H - margins.top - margins.bottom;
-      const contentH = innerH - FOOTER_H;          // ← footer guard on every page
-      let pageLimit  = contentH - HEADER_H;         // page 1
-      let used       = 0;
-      const breaks   = [];
+      // A centered photo stacks above the name (adds its full height); a
+      // left/right photo floats beside it (adds height only past the text block).
+      const psize = theme.photoSize || 80;
+      const photoExtra = showPhoto ? (photoAlign === 'center' ? psize + 28 : Math.max(28, psize - 52)) : 0;
+      const chrome     = TEMPLATE_CHROME[template] || { extra: 0, header: HEADER_H };
+      const innerH     = pageH - margins.top - margins.bottom;
+      const contentH   = innerH - FOOTER_H - chrome.extra;          // footer + per-template chrome guard
+      const titleExtra = jobTitle ? 22 : 0;                          // the job-title line under the name
+      const page1Limit = contentH - chrome.header - photoExtra - titleExtra;
+      const breaks     = [];
 
-      nodes.forEach((el, i) => {
-        const h = el.offsetHeight + ENTRY_GAP;
-        if (i > 0 && used + h > pageLimit) {
-          breaks.push(i);
-          pageLimit = contentH;   // page 2+
-          used = h;
-        } else {
-          used += h;
-        }
-      });
+      if (template === 'two-column') {
+        // The two columns share each page's height, so a page is "full" when
+        // EITHER column reaches the limit. Entry heights are measured at their
+        // real column widths (see MeasurePane), so this matches what renders —
+        // no phantom overflow page from summing both columns as one tall list.
+        let leftUsed = 0, rightUsed = 0, limit = page1Limit;
+        nodes.forEach((el, i) => {
+          const isLeft = el.getAttribute('data-col') === 'L';
+          const h      = el.offsetHeight + ENTRY_GAP;
+          const used   = isLeft ? leftUsed : rightUsed;
+          if (i > 0 && used + h > limit) {
+            breaks.push(i);
+            limit     = contentH;          // page 2+ has no header
+            leftUsed  = isLeft ? h : 0;
+            rightUsed = isLeft ? 0 : h;
+          } else if (isLeft) {
+            leftUsed  += h;
+          } else {
+            rightUsed += h;
+          }
+        });
+      } else {
+        let used = 0, limit = page1Limit;
+        nodes.forEach((el, i) => {
+          const h = el.offsetHeight + ENTRY_GAP;
+          if (i > 0 && used + h > limit) {
+            breaks.push(i);
+            limit = contentH;   // page 2+
+            used  = h;
+          } else {
+            used += h;
+          }
+        });
+      }
 
       setPageBreaks(breaks);
       onPageCountChange?.(breaks.length + 1);
@@ -266,14 +412,49 @@ export function ResumePreview({ resume, template = 'modern', currentPage = 1, on
   // ── Measure pane ─────────────────────────────────────────────────────────
   const MeasurePane = ({ headingClass }) => {
     headingClassRef.current = headingClass;
-    const all = buildEntries(headingClass);
+    const all    = buildEntries(headingClass);
+    const innerW = pageW - margins.left - margins.right;
+
+    // Two-column: measure each entry at its actual column width (and the
+    // template's 11px font) so the paginator's per-column budget is accurate.
+    if (template === 'two-column') {
+      const gap    = 16; // matches the `gap-4` between columns
+      const leftW  = Math.floor((innerW - gap) * 2 / 3);
+      const rightW = innerW - gap - leftW;
+      return (
+        <div
+          ref={measureRef}
+          aria-hidden="true"
+          style={{
+            position: 'fixed', left: '-9999px', top: '0px',
+            pointerEvents: 'none', visibility: 'hidden',
+            fontFamily: font, fontSize: '11px', boxSizing: 'border-box', zIndex: -9999,
+          }}
+        >
+          {all.map((e, i) => {
+            const isLeft = TWO_COL_LEFT.includes(e.sectionKey);
+            return (
+              <div
+                key={e.id}
+                data-entry={i}
+                data-col={isLeft ? 'L' : 'R'}
+                style={{ width: isLeft ? leftW : rightW, marginBottom: ENTRY_GAP }}
+              >
+                {e.node}
+              </div>
+            );
+          })}
+        </div>
+      );
+    }
+
     return (
       <div
         ref={measureRef}
         aria-hidden="true"
         style={{
           position: 'fixed', left: '-9999px', top: '0px',
-          width: `${A4_W - margins.left - margins.right}px`,
+          width: `${innerW}px`,
           pointerEvents: 'none', visibility: 'hidden',
           fontFamily: font, fontSize: '12px', boxSizing: 'border-box', zIndex: -9999,
         }}
@@ -389,7 +570,7 @@ export function ResumePreview({ resume, template = 'modern', currentPage = 1, on
     paddingLeft:     margins.left,
     width:           '100%',
     boxSizing:       'border-box',
-    height:          `${A4_H}px`,
+    height:          `${pageH}px`,
     overflow:        'hidden',
     backgroundColor: 'white',
     ...extra,
@@ -397,8 +578,10 @@ export function ResumePreview({ resume, template = 'modern', currentPage = 1, on
 
   // ── Contact headers ───────────────────────────────────────────────────────
   const ModernHeader = () => (
-    <div className="border-b-2 pb-3 mb-4" style={{ borderColor: theme.accentColor }}>
-      <h1 className="text-3xl font-bold text-slate-900 mb-1">{personalInfo.fullName || 'Your Name'}</h1>
+    <div className="pb-3 mb-4" style={{ borderBottom: `1px solid ${theme.accentColor}`, display: 'flow-root' }}>
+      <PhotoAvatar size={76} />
+      <h1 className="text-3xl font-bold text-slate-900">{personalInfo.fullName || 'Your Name'}</h1>
+      <JobTitleLine jobTitle={jobTitle} className="text-base font-semibold mb-1.5" style={{ color: theme.accentColor }} />
       <div className="flex flex-wrap gap-3 text-sm text-slate-600">
         {personalInfo.email && (
           <span className="flex items-center gap-1">
@@ -456,8 +639,10 @@ export function ResumePreview({ resume, template = 'modern', currentPage = 1, on
         <MeasurePane headingClass={h} />
         <div style={pageStyle()}>
           {currentPage === 1 && (
-            <div className="text-center border-b-2 pb-4 mb-4" style={{ borderColor: theme.accentColor }}>
-              <h1 className="text-3xl font-bold text-slate-900 mb-2 uppercase tracking-wide">{personalInfo.fullName || 'Your Name'}</h1>
+            <div className="text-center pb-4 mb-4" style={{ borderBottom: `1px solid ${theme.accentColor}`, display: 'flow-root' }}>
+              <PhotoAvatar size={72} />
+              <h1 className="text-3xl font-bold text-slate-900 mb-1 uppercase tracking-wide">{personalInfo.fullName || 'Your Name'}</h1>
+              <JobTitleLine jobTitle={jobTitle} className="text-sm font-semibold uppercase tracking-[0.18em] mb-2" style={{ color: theme.accentColor }} />
               <div className="flex flex-wrap justify-center gap-x-2 gap-y-1 text-sm text-slate-700">
                 {personalInfo.email && <span>{personalInfo.email}</span>}
                 {personalInfo.phone && <span>| {personalInfo.phone}</span>}
@@ -480,8 +665,10 @@ export function ResumePreview({ resume, template = 'modern', currentPage = 1, on
         <MeasurePane headingClass={h} />
         <div style={pageStyle()}>
           {currentPage === 1 && (
-            <div className="mb-4">
-              <h1 className="text-2xl font-light text-slate-900 mb-2 tracking-wide">{personalInfo.fullName || 'Your Name'}</h1>
+            <div className="mb-4" style={{ display: 'flow-root' }}>
+              <PhotoAvatar size={64} />
+              <h1 className="text-2xl font-light text-slate-900 mb-1 tracking-wide">{personalInfo.fullName || 'Your Name'}</h1>
+              <JobTitleLine jobTitle={jobTitle} className="text-sm font-normal text-slate-600 mb-2 tracking-wide" />
               <div className="flex flex-wrap gap-2 text-xs uppercase tracking-widest" style={{ color: theme.accentColor }}>
                 {personalInfo.email && <span>{personalInfo.email}</span>}
                 {personalInfo.phone && <span>• {personalInfo.phone}</span>}
@@ -504,8 +691,9 @@ export function ResumePreview({ resume, template = 'modern', currentPage = 1, on
         <MeasurePane headingClass={h} />
         <div style={pageStyle({ fontFamily: 'Arial, sans-serif' })}>
           {currentPage === 1 && (
-            <div className="mb-4" style={{ borderBottom: `2px solid ${theme.accentColor}`, paddingBottom: '1rem' }}>
-              <h1 className="text-2xl font-bold text-slate-900 mb-2">{personalInfo.fullName || 'Your Name'}</h1>
+            <div className="mb-4" style={{ borderBottom: `1px solid ${theme.accentColor}`, paddingBottom: '1rem' }}>
+              <h1 className="text-2xl font-bold text-slate-900 mb-1">{personalInfo.fullName || 'Your Name'}</h1>
+              <JobTitleLine jobTitle={jobTitle} className="text-sm text-slate-700 mb-2" />
               <div className="flex flex-wrap gap-3 text-sm text-slate-600">
                 {personalInfo.email && <span>{personalInfo.email}</span>}
                 {personalInfo.phone && <span>| {personalInfo.phone}</span>}
@@ -528,8 +716,10 @@ export function ResumePreview({ resume, template = 'modern', currentPage = 1, on
         <MeasurePane headingClass={h} />
         <div style={pageStyle({ backgroundColor: theme.accentColor, display: 'flex', flexDirection: 'column' })}>
           {currentPage === 1 && (
-            <div className="bg-white rounded-lg p-6 mb-4 shadow-lg" style={{ flexShrink: 0 }}>
-              <h1 className="text-3xl font-bold text-slate-900 mb-2">{personalInfo.fullName || 'Your Name'}</h1>
+            <div className="bg-white rounded-lg p-6 mb-4 shadow-lg" style={{ flexShrink: 0, display: 'flow-root' }}>
+              <PhotoAvatar size={76} />
+              <h1 className="text-3xl font-bold text-slate-900 mb-1">{personalInfo.fullName || 'Your Name'}</h1>
+              <JobTitleLine jobTitle={jobTitle} className="text-base font-semibold mb-2" style={{ color: theme.accentColor }} />
               <div className="flex flex-wrap gap-3 text-sm text-slate-600">
                 {personalInfo.email && <span>{personalInfo.email}</span>}
                 {personalInfo.phone && <span>• {personalInfo.phone}</span>}
@@ -549,16 +739,21 @@ export function ResumePreview({ resume, template = 'modern', currentPage = 1, on
 
   if (template === 'two-column') {
     const h = 'text-xs font-bold mb-2 uppercase tracking-widest';
-    const leftSections  = orderedSections.filter(s => ['summary','experience','education'].includes(s));
-    const rightSections = orderedSections.filter(s => ['skills','projects','certifications','languages','awards'].includes(s));
+    // Long-form sections go in the wide main column; short list-style sections
+    // go in the narrow sidebar (keeps Projects/Experience readable, avoids the
+    // sidebar wrapping long titles onto 3 lines). Shared with the paginator.
+    const leftSections  = orderedSections.filter(s => TWO_COL_LEFT.includes(s));
+    const rightSections = orderedSections.filter(s => TWO_COL_RIGHT.includes(s));
     return (
       <>
         <MeasurePane headingClass={h} />
         <div style={pageStyle({ fontSize: '11px' })}>
           {currentPage === 1 && (
-            <div className="flex gap-4 mb-4" style={{ borderBottom:`2px solid ${theme.accentColor}`, paddingBottom:'1rem' }}>
-              <div className="w-2/3">
-                <h1 className="text-2xl font-bold text-slate-900 mb-2">{personalInfo.fullName || 'Your Name'}</h1>
+            <div className="flex gap-4 mb-4" style={{ borderBottom:`1px solid ${theme.accentColor}`, paddingBottom:'1rem' }}>
+              <div className="w-2/3" style={{ display: 'flow-root' }}>
+                <PhotoAvatar size={60} />
+                <h1 className="text-2xl font-bold text-slate-900 mb-1">{personalInfo.fullName || 'Your Name'}</h1>
+                <JobTitleLine jobTitle={jobTitle} className="text-sm font-semibold mb-2" style={{ color: theme.accentColor }} />
                 <div className="flex flex-wrap gap-2 text-xs text-slate-600">
                   {personalInfo.email && <span>{personalInfo.email}</span>}
                   {personalInfo.phone && <span>• {personalInfo.phone}</span>}

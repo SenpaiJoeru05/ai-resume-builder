@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { useRouting } from '../hooks/useRouting';
 import { Button } from '../components/shared/Button';
 import { useResume } from '../hooks/useResume';
-import { TEMPLATES } from '../components/TemplateGallery';
+import { TEMPLATES, TemplateThumbnail } from '../components/TemplateGallery';
 
 // ─── Scroll Reveal Component ────────────────────────────────────────
 function ScrollReveal({ children, className = "" }) {
@@ -62,7 +62,7 @@ function Counter({ end, suffix = "" }) {
 }
 
 // ─── Template Card ────────────────────────────────────────────────
-function TemplateCard({ name, tag, badge, preview, onClick }) {
+function TemplateCard({ id, name, tag, badge, onClick }) {
   const ref = useRef();
   const [isVisible, setIsVisible] = useState(false);
 
@@ -93,9 +93,9 @@ function TemplateCard({ name, tag, badge, preview, onClick }) {
           {badge}
         </div>
       )}
-      <div className="aspect-[3/4] bg-gradient-to-b from-slate-50 to-slate-100 p-4 flex items-start justify-center pt-6">
-        <div className="w-full h-full rounded-xl shadow-md overflow-hidden">
-          {preview}
+      <div className="aspect-[3/4] bg-gradient-to-b from-slate-50 to-slate-100 p-4 pt-6 flex items-start justify-center overflow-hidden">
+        <div className="w-full rounded-xl shadow-md overflow-hidden ring-1 ring-slate-200/70">
+          <TemplateThumbnail template={id} />
         </div>
       </div>
       <div className="px-5 py-4 border-t border-slate-100">
@@ -148,6 +148,18 @@ function Step({ num, icon, title, desc, color }) {
 
 
 
+// Height of the fixed nav. Shared by the scroll offset and the section observer
+// so they can't disagree about where "the top" is.
+const NAV_H = 64;
+
+// Sections reachable from the nav. Shared by the desktop links, the mobile menu
+// and the scroll observer, so adding a section only needs one edit.
+const NAV_LINKS = [
+  { id: 'how-it-works', label: 'How it Works' },
+  { id: 'features',     label: 'Features' },
+  { id: 'templates',    label: 'Templates' },
+];
+
 // ─── Main Landing Page ────────────────────────────────────────────
 export function LandingPage() {
   const { goToCreateFromScratch, goToCreateFromPDF, goToDashboard } = useRouting();
@@ -155,12 +167,47 @@ export function LandingPage() {
   const hasExistingResumes = resumes && resumes.length > 0;
   const [scrolled, setScrolled] = useState(false);
   const [isNavigating, setIsNavigating] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [activeSection, setActiveSection] = useState('');
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20);
     window.addEventListener("scroll", onScroll);
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
+
+  // Highlights the nav item for whatever section you're actually looking at.
+  // The top offset accounts for the fixed nav so a section counts as "current"
+  // once it clears the bar, not once it touches the viewport edge.
+  useEffect(() => {
+    const ids = NAV_LINKS.map((l) => l.id);
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries.filter((e) => e.isIntersecting);
+        if (visible.length) setActiveSection(visible[0].target.id);
+        else if (window.scrollY < 200) setActiveSection('');
+      },
+      { rootMargin: `-${NAV_H}px 0px -55% 0px` }
+    );
+    ids.forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) observer.observe(el);
+    });
+    return () => observer.disconnect();
+  }, []);
+
+  // Close the mobile menu on Escape, and don't let the page scroll behind it.
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onKey = (e) => { if (e.key === 'Escape') setMenuOpen(false); };
+    document.addEventListener('keydown', onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [menuOpen]);
 
   const handleNavigateWithAnimation = (callback) => {
     setIsNavigating(true);
@@ -169,19 +216,22 @@ export function LandingPage() {
     }, 400);
   };
 
+  // scrollIntoView({ block: 'start' }) aligns the section to the viewport top,
+  // which puts its heading *behind* the fixed nav. Offset by the nav height.
   const scrollToSection = (sectionId) => {
     const element = document.getElementById(sectionId);
-    if (element) {
-      element.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
+    if (!element) return;
+    setMenuOpen(false);
+    const top = element.getBoundingClientRect().top + window.scrollY - NAV_H;
+    window.scrollTo({ top, behavior: 'smooth' });
   };
 
   // Map imported TEMPLATES to match the card structure needed for landing page
   const templates = TEMPLATES.slice(0, 3).map(t => ({
+    id: t.id,
     name: t.name,
     tag: t.description,
     badge: t.name === 'Modern' ? 'Popular' : undefined,
-    preview: t.preview,
     onClick: goToCreateFromScratch,
   }));
 
@@ -230,30 +280,140 @@ export function LandingPage() {
         }`}
       />
 
+      {/* Keyboard users would otherwise tab the whole nav before reaching content */}
+      <a
+        href="#main"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[60] focus:rounded-lg focus:bg-indigo-600 focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-white"
+      >
+        Skip to content
+      </a>
+
       {/* ── NAV ── */}
-      <nav className={`fixed top-0 inset-x-0 z-50 transition-all duration-300 ${scrolled ? "bg-white/90 backdrop-blur-md shadow-sm border-b border-slate-100" : "bg-transparent"}`}>
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
+      {/* Keeps a faint blur/border instead of going fully transparent: over the
+          light hero, transparent left the links floating with nothing to
+          separate them from the content scrolling behind. */}
+      <nav
+        className={`fixed top-0 inset-x-0 z-50 transition-all duration-300 ${
+          scrolled
+            ? "bg-white/85 backdrop-blur-lg shadow-sm border-b border-slate-200/80"
+            : "bg-white/40 backdrop-blur-sm border-b border-white/40"
+        }`}
+        style={{ height: NAV_H }}
+      >
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-full grid grid-cols-[auto_1fr_auto] md:grid-cols-[1fr_auto_1fr] items-center gap-4">
+          <button
+            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+            className="flex items-center gap-2.5 justify-self-start rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
+            aria-label="Back to top"
+          >
             <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center shadow-lg shadow-indigo-500/40">
               <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
             </div>
             <span className="text-[15px] font-bold text-slate-900 tracking-tight">ResumeAI</span>
+          </button>
+
+          {/* Section links, with an underline that tracks where you actually are */}
+          <div className="hidden md:flex items-center gap-1 justify-self-center">
+            {NAV_LINKS.map((link) => {
+              const active = activeSection === link.id;
+              return (
+                <button
+                  key={link.id}
+                  onClick={() => scrollToSection(link.id)}
+                  aria-current={active ? 'true' : undefined}
+                  className={`relative px-4 py-2 text-sm rounded-lg font-medium transition-colors ${
+                    active ? 'text-indigo-700' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
+                  }`}
+                >
+                  {link.label}
+                  <span
+                    aria-hidden="true"
+                    className={`absolute left-4 right-4 bottom-1 h-0.5 rounded-full bg-indigo-600 transition-transform duration-300 origin-left ${
+                      active ? 'scale-x-100' : 'scale-x-0'
+                    }`}
+                  />
+                </button>
+              );
+            })}
           </div>
-          <div className="hidden md:flex items-center gap-1">
-            <button onClick={() => scrollToSection('features')} className="px-4 py-2 text-sm text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-all font-medium">Features</button>
-            <button onClick={() => scrollToSection('templates')} className="px-4 py-2 text-sm text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-all font-medium">Templates</button>
-          </div>
-          <div className="flex items-center gap-2">
-            {hasExistingResumes && <Button variant="ghost" size="sm" onClick={goToDashboard}>My Resumes</Button>}
-            <Button variant="primary" size="sm" onClick={goToCreateFromScratch}>Get Started Free</Button>
+
+          <div className="flex items-center gap-2 justify-self-end">
+            {hasExistingResumes && (
+              <Button variant="ghost" size="sm" className="hidden sm:inline-flex" onClick={goToDashboard}>
+                My Resumes
+              </Button>
+            )}
+            <Button variant="primary" size="sm" onClick={goToCreateFromScratch}>
+              <span>Get Started<span className="hidden sm:inline"> Free</span></span>
+            </Button>
+
+            {/* Hamburger — the section links were simply absent on mobile before */}
+            <button
+              onClick={() => setMenuOpen((v) => !v)}
+              className="md:hidden p-2 -mr-1 rounded-lg text-slate-700 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+              aria-label={menuOpen ? 'Close menu' : 'Open menu'}
+              aria-expanded={menuOpen}
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                {menuOpen
+                  ? <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  : <path strokeLinecap="round" strokeLinejoin="round" d="M4 7h16M4 12h16M4 17h16" />}
+              </svg>
+            </button>
           </div>
         </div>
       </nav>
 
+      {/* ── MOBILE MENU ── */}
+      <div
+        className={`md:hidden fixed inset-0 z-40 transition-opacity duration-200 ${
+          menuOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
+        }`}
+      >
+        <button
+          className="absolute inset-0 w-full bg-slate-900/20 backdrop-blur-sm"
+          onClick={() => setMenuOpen(false)}
+          tabIndex={-1}
+          aria-label="Close menu"
+        />
+        <div
+          className={`absolute inset-x-0 bg-white border-b border-slate-200 shadow-xl px-4 pt-3 pb-5 transition-transform duration-200 ${
+            menuOpen ? 'translate-y-0' : '-translate-y-3'
+          }`}
+          style={{ top: NAV_H }}
+        >
+          <div className="flex flex-col">
+            {NAV_LINKS.map((link) => (
+              <button
+                key={link.id}
+                onClick={() => scrollToSection(link.id)}
+                className={`text-left px-3 py-3 rounded-lg text-[15px] font-medium transition-colors ${
+                  activeSection === link.id
+                    ? 'text-indigo-700 bg-indigo-50'
+                    : 'text-slate-700 hover:bg-slate-100'
+                }`}
+              >
+                {link.label}
+              </button>
+            ))}
+          </div>
+          <div className="mt-3 pt-3 border-t border-slate-100 flex flex-col gap-2">
+            {hasExistingResumes && (
+              <Button variant="secondary" size="md" className="w-full" onClick={() => { setMenuOpen(false); goToDashboard(); }}>
+                My Resumes
+              </Button>
+            )}
+            <Button variant="primary" size="md" className="w-full" onClick={() => { setMenuOpen(false); goToCreateFromScratch(); }}>
+              Get Started Free
+            </Button>
+          </div>
+        </div>
+      </div>
+
       {/* ── HERO ── */}
-      <section className="relative pt-28 pb-20 px-4 sm:px-6 overflow-hidden hero-grid">
+      <section id="main" className="relative pt-28 pb-20 px-4 sm:px-6 overflow-hidden hero-grid">
         <div className="absolute inset-0 bg-gradient-to-b from-indigo-50/80 via-white/60 to-white pointer-events-none"></div>
         <div className="absolute top-10 left-1/4 w-72 h-72 bg-indigo-200/30 rounded-full blur-3xl pointer-events-none floating"></div>
         <div className="absolute top-32 right-1/4 w-56 h-56 bg-violet-200/30 rounded-full blur-3xl pointer-events-none floating-delayed"></div>
@@ -275,20 +435,28 @@ export function LandingPage() {
             tailor to any role, and get hired faster.
           </p>
 
-          <div className="fade-in stagger-3 flex flex-col sm:flex-row gap-3 justify-center mb-10">
-            <Button variant="primary" size="lg" onClick={goToCreateFromScratch}>
-              <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="fade-in stagger-3 flex flex-col sm:flex-row gap-3 justify-center items-stretch sm:items-center mb-6">
+            <Button variant="primary" size="lg" className="group w-full sm:w-auto" onClick={goToCreateFromScratch}>
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
               </svg>
               Create from Scratch
+              <svg className="w-4 h-4 transition-transform duration-200 group-hover:translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
+              </svg>
             </Button>
-            <Button variant="secondary" size="lg" onClick={goToCreateFromPDF}>
-              <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <Button variant="secondary" size="lg" className="w-full sm:w-auto" onClick={goToCreateFromPDF}>
+              <svg className="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
               </svg>
               Import from PDF
             </Button>
           </div>
+
+          {/* Names the cost of each path, so the choice above is obvious */}
+          <p className="fade-in stagger-3 text-sm text-slate-400 mb-10">
+            Start blank, or upload an existing PDF and we&rsquo;ll fill it in for you &mdash; about 10 seconds.
+          </p>
 
           <div className="fade-in stagger-4 flex flex-col sm:flex-row items-center justify-center gap-6 text-sm text-slate-500">
             <div className="flex -space-x-2">
@@ -397,7 +565,7 @@ export function LandingPage() {
       </section>
 
       {/* ── HOW IT WORKS ── */}
-      <section className="py-24 px-4 sm:px-6">
+      <section id="how-it-works" className="py-24 px-4 sm:px-6">
         <div className="max-w-5xl mx-auto">
           <ScrollReveal>
             <div className="text-center mb-16">
@@ -535,7 +703,7 @@ export function LandingPage() {
       {/* ── FOOTER ── */}
       <footer className="bg-slate-950 text-slate-400">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-16">
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-10 mb-14">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-10 mb-14">
             <div className="col-span-2">
               <div className="flex items-center gap-2.5 mb-5">
                 <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center">
@@ -554,16 +722,40 @@ export function LandingPage() {
                 ))}
               </div>
             </div>
+            {/* Every link here goes somewhere real. The previous footer had 15
+                href="#" entries (Pricing, Blog, Careers, Privacy...) for pages
+                that don't exist — clicking them just jumped to the top, which
+                reads as a broken site. */}
             {[
-              { heading: "Product", links: ["Features","Templates","Pricing","Changelog"] },
-              { heading: "Resources", links: ["Blog","Help Center","Resume Tips","Career Guide"] },
-              { heading: "Company", links: ["About","Contact","Privacy","Terms"] },
+              {
+                heading: 'Product',
+                links: [
+                  { label: 'How it Works', onClick: () => scrollToSection('how-it-works') },
+                  { label: 'Features',     onClick: () => scrollToSection('features') },
+                  { label: 'Templates',    onClick: () => scrollToSection('templates') },
+                ],
+              },
+              {
+                heading: 'Get Started',
+                links: [
+                  { label: 'Create from Scratch', onClick: goToCreateFromScratch },
+                  { label: 'Import from PDF',     onClick: goToCreateFromPDF },
+                  ...(hasExistingResumes ? [{ label: 'My Resumes', onClick: goToDashboard }] : []),
+                ],
+              },
             ].map(({ heading, links }) => (
               <div key={heading}>
                 <h4 className="text-white font-semibold text-sm mb-5">{heading}</h4>
                 <ul className="space-y-3">
-                  {links.map(l => (
-                    <li key={l}><a href="#" className="text-sm hover:text-white transition-colors">{l}</a></li>
+                  {links.map(({ label, onClick }) => (
+                    <li key={label}>
+                      <button
+                        onClick={onClick}
+                        className="text-sm text-left hover:text-white transition-colors focus-visible:outline-none focus-visible:text-white focus-visible:underline"
+                      >
+                        {label}
+                      </button>
+                    </li>
                   ))}
                 </ul>
               </div>
@@ -581,11 +773,9 @@ export function LandingPage() {
           </div>
           <div className="border-t border-white/10 pt-8 flex flex-col sm:flex-row justify-between items-center gap-3 text-xs">
             <p>© 2026 ResumeAI. All rights reserved.</p>
-            <div className="flex gap-5">
-              {["Privacy","Terms","Cookies"].map(l => (
-                <a key={l} href="#" className="hover:text-white transition-colors">{l}</a>
-              ))}
-            </div>
+            <p className="text-slate-500">
+              Your resumes are stored in this browser only &mdash; nothing is uploaded to us.
+            </p>
           </div>
         </div>
       </footer>

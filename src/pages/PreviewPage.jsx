@@ -6,6 +6,8 @@ import { useResume } from '../hooks/useResume'
 import { useRouting } from '../hooks/useRouting'
 import { Button } from '../components/shared/Button'
 import { ResumePreview } from '../components/ResumePreview'
+import { getResumePageSize } from '../utils/pageSizes'
+import { generateResumePDF, saveBlobAsFile } from '../services/pdfDownloadService'
 
 export function PreviewPage() {
   const { resumeId } = useParams()
@@ -27,6 +29,7 @@ export function PreviewPage() {
     return () => window.removeEventListener('scroll', onScroll)
   }, [])
 
+  const { width: pageW, height: pageH } = getResumePageSize(resume)
   const selectedTemplate = resume.meta?.template || 'modern'
   const resumeTitle = resume.meta?.title || 'My Resume'
 
@@ -48,33 +51,11 @@ export function PreviewPage() {
 
   const handleDownload = async () => {
     try {
-      const response = await fetch('http://localhost:3001/api/pdf/generate', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          resume,
-          template: selectedTemplate
-        })
-      })
-
-      if (!response.ok) {
-        throw new Error('Failed to generate PDF')
-      }
-
-      const blob = await response.blob()
-      const url = window.URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `${resumeTitle}.pdf`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      window.URL.revokeObjectURL(url)
+      const blob = await generateResumePDF({ resume, template: selectedTemplate })
+      saveBlobAsFile(blob, `${resumeTitle}.pdf`)
     } catch (error) {
       console.error('Download error:', error)
-      alert('Failed to generate PDF. Please make sure the server is running on port 3001.')
+      alert(error.message)
     }
   }
 
@@ -228,8 +209,8 @@ export function PreviewPage() {
           <div 
             className="preview-shadow bg-white rounded-lg transition-transform duration-200"
             style={{ 
-              width: '794px',
-              minHeight: '1123px',
+              width: `${pageW}px`,
+              minHeight: `${pageH}px`,
               transform: `scale(${zoom / 100})`,
               transformOrigin: 'top center',
               boxShadow: '0 20px 60px rgba(0, 0, 0, 0.15)'

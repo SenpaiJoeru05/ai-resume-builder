@@ -128,7 +128,9 @@ function SortableItem({ id, section, onToggleVisibility, onRename }) {
 }
 
 export function SectionManager({ sectionConfig, onReorder, onToggleVisibility, onRename }) {
-  const [items] = useState(() => sectionConfig.map((s) => s.key));
+  // Derive from props each render so reorders persist across multiple drags and
+  // reflect external changes (e.g. the live Arrange panel on the preview).
+  const items = sectionConfig.map((s) => s.key);
 
   const sensors = useSensors(
     useSensor(PointerSensor),

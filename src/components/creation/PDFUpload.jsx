@@ -1,6 +1,7 @@
 import { useState } from 'react'
+import { PDFProcessingStatus } from './PDFProcessingStatus'
 
-export function PDFUpload({ onFileUploaded, processing }) {
+export function PDFUpload({ onFileUploaded, processing, processingStage, fileName, pageProgress, retrySecondsLeft }) {
   const [dragActive, setDragActive] = useState(false)
 
   const handleDrag = (e) => {
@@ -38,37 +39,52 @@ export function PDFUpload({ onFileUploaded, processing }) {
         <p className="text-slate-600">Upload an existing resume PDF to extract your information</p>
       </div>
 
-      <div
-        className={`border-2 border-dashed rounded-xl p-16 text-center transition-all ${
-          dragActive
-            ? 'border-blue-500 bg-blue-50'
-            : 'border-slate-300 hover:border-slate-400'
-        }`}
-        onDragEnter={handleDrag}
-        onDragLeave={handleDrag}
-        onDragOver={handleDrag}
-        onDrop={handleDrop}
-      >
-        <svg className="w-20 h-20 text-slate-400 mx-auto mb-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-        </svg>
-        <p className="text-lg text-slate-600 mb-2">
-          {processing ? 'Processing PDF...' : 'Drag and drop your resume PDF here'}
-        </p>
-        <p className="text-slate-400 text-sm mb-6">or</p>
-        <label className="inline-block">
-          <input
-            type="file"
-            accept=".pdf"
-            onChange={(e) => e.target.files && handleFile(e.target.files[0])}
-            className="hidden"
-            disabled={processing}
+      {/* While processing, the drop zone becomes the progress panel outright —
+          leaving a live "Browse Files" button next to a spinner invites a second
+          upload on top of the one already running. */}
+      {processing ? (
+        <div
+          className="border-2 border-slate-200 rounded-xl p-10 sm:p-12 bg-slate-50/60"
+          role="status"
+          aria-live="polite"
+        >
+          <PDFProcessingStatus
+            stage={processingStage}
+            fileName={fileName}
+            pageProgress={pageProgress}
+            retrySecondsLeft={retrySecondsLeft}
           />
-          <span className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 cursor-pointer font-medium transition">
-            Browse Files
-          </span>
-        </label>
-      </div>
+        </div>
+      ) : (
+        <div
+          className={`border-2 border-dashed rounded-xl p-16 text-center transition-all ${
+            dragActive
+              ? 'border-blue-500 bg-blue-50'
+              : 'border-slate-300 hover:border-slate-400'
+          }`}
+          onDragEnter={handleDrag}
+          onDragLeave={handleDrag}
+          onDragOver={handleDrag}
+          onDrop={handleDrop}
+        >
+          <svg className="w-20 h-20 text-slate-400 mx-auto mb-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+          </svg>
+          <p className="text-lg text-slate-600 mb-2">Drag and drop your resume PDF here</p>
+          <p className="text-slate-400 text-sm mb-6">or</p>
+          <label className="inline-block">
+            <input
+              type="file"
+              accept=".pdf"
+              onChange={(e) => e.target.files && handleFile(e.target.files[0])}
+              className="hidden"
+            />
+            <span className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 cursor-pointer font-medium transition">
+              Browse Files
+            </span>
+          </label>
+        </div>
+      )}
 
       <div className="p-4 bg-yellow-50 rounded-lg">
         <div className="flex items-start gap-3">
