@@ -2,15 +2,15 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { ResumePreview } from './ResumePreview'
+import { getResumePageSize } from '../utils/pageSizes'
 import './PDFPreviewModal.css'
 
-// A4 at 96 DPI — must match ResumePreview constants exactly
-const PAGE_W = 794
-const PAGE_H = 1123
+// Page size comes from the resume (utils/pageSizes); these are chrome only.
 const FIT_PADDING = 64  // breathing room around the page
 const ZOOM_STEPS = [0.5, 0.65, 0.8, 1, 1.25, 1.5, 2]
 
 export function PDFPreviewModal({ isOpen, resume, template, onConfirm, onCancel }) {
+  const { width: PAGE_W, height: PAGE_H, label: pageLabel, dimensions: pageDims } = getResumePageSize(resume)
   const [zoom, setZoom] = useState('fit')
   const [fitScale, setFitScale] = useState(1)
   const [isDownloading, setIsDownloading] = useState(false)
@@ -38,7 +38,7 @@ export function PDFPreviewModal({ isOpen, resume, template, onConfirm, onCancel 
     const compute = () => {
       const availW = el.clientWidth  - FIT_PADDING
       const availH = el.clientHeight - FIT_PADDING
-      // Scale so the full A4 page fits both dimensions
+      // Scale so the whole page fits both dimensions
       const scale = Math.min(availW / PAGE_W, availH / PAGE_H)
       setFitScale(Math.max(0.1, scale))
     }
@@ -47,7 +47,8 @@ export function PDFPreviewModal({ isOpen, resume, template, onConfirm, onCancel 
     const observer = new ResizeObserver(compute)
     observer.observe(el)
     return () => observer.disconnect()
-  }, [isOpen])
+    // PAGE_W/H are deps: switching paper size changes the fit scale.
+  }, [isOpen, PAGE_W, PAGE_H])
 
   // Escape key + body scroll lock
   useEffect(() => {
@@ -117,7 +118,7 @@ export function PDFPreviewModal({ isOpen, resume, template, onConfirm, onCancel 
             </span>
             <div className="pdf-preview-heading-text">
               <h2 className="pdf-preview-title">Resume Preview</h2>
-              <p className="pdf-preview-subtitle">A4 · 210mm × 297mm</p>
+              <p className="pdf-preview-subtitle">{pageLabel} · {pageDims}</p>
             </div>
           </div>
           <button
@@ -134,12 +135,13 @@ export function PDFPreviewModal({ isOpen, resume, template, onConfirm, onCancel 
 
         {/* ── Preview canvas ── */}
         {/*
-          KEY FIX: The ResumePreview must ALWAYS render at exactly PAGE_W (794px).
-          We achieve this with the same pattern as EditorPreview:
+          KEY FIX: ResumePreview must ALWAYS render at the full page width in CSS
+          pixels, never at a shrunken width. Same pattern as EditorPreview:
             - Outer wrapper: sized to (PAGE_W * scale) × (PAGE_H * scale) — reserves space
             - Inner page:    fixed PAGE_W × PAGE_H, transform-origin top-left, scaled down
-          This means ResumePreview's width: '100%' resolves to 794px, matching the
-          paginator's measurement, so layout is identical to the Live Preview.
+          So ResumePreview's width: '100%' resolves to the true page width, matching
+          the paginator's measurement, and layout is identical to the Live Preview.
+          PAGE_W/PAGE_H come from the resume's chosen paper size (utils/pageSizes).
         */}
         <div
           className={`pdf-preview-content ${isFit ? 'fit-mode' : 'zoom-mode'}`}
@@ -156,9 +158,9 @@ export function PDFPreviewModal({ isOpen, resume, template, onConfirm, onCancel 
             }}
           >
             {/*
-              Inner page — always exactly 794 × 1123px, then CSS-scaled.
+              Inner page — exactly the chosen paper's px size, then CSS-scaled.
               transform-origin: top left ensures it scales from the correct corner.
-              The ResumePreview inside sees 794px width → correct layout & pagination.
+              ResumePreview inside sees the true page width → correct pagination.
             */}
             <div
               className="pdf-preview-page"

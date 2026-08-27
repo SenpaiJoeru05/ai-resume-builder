@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useRouting } from '../../hooks/useRouting'
 import { useResume } from '../../hooks/useResume'
-import { Button } from '../../components/shared/Button'
 import { TemplateSelection } from '../../components/creation/TemplateSelection'
 import { JobTargetSetup } from '../../components/creation/JobTargetSetup'
 import { PersonalInfoSetup } from '../../components/creation/PersonalInfoSetup'
@@ -14,7 +13,10 @@ const DEMO_DATA = {
   jobTarget: {
     jobTitle: 'Senior Full Stack Developer',
     industry: 'Technology / Software',
-    yearsExperience: '5-7',
+    // Must match a <select> option in JobTargetSetup exactly ('0-1' | '1-3' |
+    // '3-5' | '5-10' | '10+'). '5-7' was not one, so the dropdown silently
+    // rendered blank after loading the demo data.
+    yearsExperience: '5-10',
     seniority: 'senior',
     jobDescription: 'Looking for experienced full stack developers with React, Node.js, and AWS expertise',
     tone: 'professional',
